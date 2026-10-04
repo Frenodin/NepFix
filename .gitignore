@@ -1,0 +1,35 @@
+# сборка
+bin/
+obj/
+*.user
+.vs/
+.idea/
+
+# Unity-проект шейдеров NepFX
+NepFX_Unity/Library/
+NepFX_Unity/Temp/
+NepFX_Unity/Logs/
+NepFX_Unity/obj/
+NepFX_Unity/Build/
+NepFX_Unity/UserSettings/
+NepFX_Unity/build.log
+*.csproj.user
+NepFX_Unity/*.sln
+NepFX_Unity/*.csproj
+*.bak*
+*.bak*.meta
+
+# файлы игры и BepInEx: их нельзя выкладывать
+interop/
+BepInEx/
+*.bundle
+GameAssembly.dll
+UnityPlayer.dll
+
+# релизы собираются отдельно
+release/
+*.zip
+
+# Mixamo и другие сторонние анимации: их лицензия запрещает выкладывать исходные файлы
+NepFX_Unity/Assets/Idles/
+NepFX_Unity/Assets/Idles.meta

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Сборка: dotnet build -c Release -p:RefDir="<папка игры>\BepInEx"
+       RefDir должен содержать core\ и interop\ из установленного BepInEx 6 IL2CPP после первого запуска игры. -->
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>NepFix</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <DebugType>none</DebugType>
+    <NoWarn>CS0169;CS0162;CS0649</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(RefDir)/core/*.dll" Private="false" />
+    <Reference Include="$(RefDir)/interop/*.dll" Private="false" />
+    <EmbeddedResource Include="../tools/previews/previews.bin" LogicalName="previews.bin" />
+  </ItemGroup>
+</Project>
