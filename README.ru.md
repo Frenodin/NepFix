@@ -90,29 +90,46 @@ NepFix это неофициальный мод для PC-версии игры 
 
 ---
 
-## Требования
-- Neptunia Game Maker R:Evolution, версия Steam для Windows.
-- [BepInEx 6 IL2CPP](https://builds.bepinex.dev/projects/bepinex_be), сборка be.697 или новее, для Windows x64.
-
 ## Установка
-1. Скачайте BepInEx 6 IL2CPP для Windows x64 и распакуйте в папку игры, рядом с `Neptunia Game Maker REvolution.exe`.
-2. Запустите игру один раз и дождитесь главного меню. Первый запуск идёт долго: BepInEx генерирует служебные сборки. После этого закройте игру.
-3. Скачайте архив NepFix из раздела [Releases](https://github.com/Frenodin/NepFix/releases) и распакуйте в папку игры. Должно получиться так:
-   ```
-   Neptunia Game Maker REvolution\
-   └─ BepInEx\
-      └─ plugins\
-         └─ NepFix\
-            ├─ NepFix.dll
-            ├─ nepfx.bundle
-            └─ mod.json
-   ```
-4. Запустите игру и нажмите **F10**.
+Всё нужное уже лежит в одном архиве, BepInEx отдельно качать не надо.
+
+1. Скачайте **`NepFix-x.x.x-with-BepInEx.zip`** из раздела [Releases](https://github.com/Frenodin/NepFix/releases/latest).
+2. Откройте папку игры. В Steam: правой кнопкой по игре → **Управление** → **Просмотреть локальные файлы**.
+3. Распакуйте архив прямо в эту папку, рядом с `Neptunia Game Maker REvolution.exe`. Если Windows спросит про замену файлов, соглашайтесь.
+4. Запустите игру через Steam. Появится чёрное окно консоли BepInEx, так и должно быть. **Первый запуск долгий, 1–5 минут:** BepInEx готовит служебные файлы из кода игры. Не закрывайте игру, даже если кажется, что она зависла.
+5. В главном меню нажмите **F10**, откроется меню NepFix. **F11** включает оверлей с FPS.
+
+Следующие запуски проходят быстро. Для начала можно нажать «Баланс, рекомендуется» на вкладке «Оптимизация».
+
+После распаковки в папке игры должно быть так:
+```
+Neptunia Game Maker REvolution\
+├─ BepInEx\
+│  └─ plugins\
+│     └─ NepFix\
+├─ dotnet\
+├─ doorstop_config.ini
+├─ winhttp.dll
+└─ Neptunia Game Maker REvolution.exe
+```
+
+### Обновление
+Если BepInEx уже стоит, достаточно архива **`NepFix-x.x.x.zip`** без BepInEx: распакуйте его в папку игры с заменой файлов.
+
+### Если что-то не так
+| Проблема | Решение |
+|---|---|
+| Консоль не появилась, F10 не работает | `winhttp.dll` должен лежать рядом с exe. Антивирус мог его удалить: добавьте папку игры в исключения и распакуйте архив заново. |
+| Игра вылетает при первом запуске | Удалите папки `BepInEx\interop` и `BepInEx\cache`, запустите снова. |
+| Steam Deck или Linux | В параметрах запуска игры в Steam: `WINEDLLOVERRIDES="winhttp=n,b" %command%` |
 
 Настройки хранятся в `BepInEx\config\casimoy.nepfix.cfg`. Кнопки «Сбросить вкладку» и «Сбросить всё» возвращают значения по умолчанию.
 
 ## Удаление
-Удалите папку `BepInEx\plugins\NepFix`. Чтобы убрать BepInEx полностью, удалите папку `BepInEx`, а также файлы `winhttp.dll`, `doorstop_config.ini` и папку `dotnet` из папки игры. Файлы игры мод не изменяет.
+- **Только мод:** удалите папку `BepInEx\plugins\NepFix`.
+- **Полностью:** удалите из папки игры папки `BepInEx` и `dotnet`, файлы `winhttp.dll`, `doorstop_config.ini`, `.doorstop_version`, `changelog.txt` и `NepFix_README.txt`.
+
+Файлы игры мод не меняет.
 
 ## Советы
 - Не включайте одновременно «Шаг физики = 1/FPS» и «Плавное движение»: они делают одну работу разными способами.
@@ -147,7 +164,7 @@ NepFX_Unity\build_nepfx.bat "<папка игры>"
 **Иллюстрации меню** генерирует `tools/previews/render.py`. Это маленькая сцена с трассировкой лучей, готовый `previews.bin` вшивается в DLL.
 
 ## Благодарности
-- [BepInEx](https://github.com/BepInEx/BepInEx) и [Il2CppInterop](https://github.com/BepInEx/Il2CppInterop).
+- [BepInEx](https://github.com/BepInEx/BepInEx), входит в релизный архив по лицензии LGPL-2.1, и [Il2CppInterop](https://github.com/BepInEx/Il2CppInterop).
 - [Harmony](https://github.com/pardeike/Harmony).
 - AMD FidelityFX Super Resolution 1.0.
 
