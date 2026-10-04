@@ -182,6 +182,11 @@ NepFX_Unity\build_nepfx.bat "<папка игры>"
 
 **Иллюстрации меню** генерирует `tools/previews/render.py`. Это маленькая сцена с трассировкой лучей, готовый `previews.bin` вшивается в DLL.
 
+## Поддержать
+NepFix бесплатный и останется таким. Если хотите поддержать мои будущие проекты, это можно сделать на [Patreon](https://www.patreon.com/Frenodin).
+
+[![Поддержать на Patreon](https://img.shields.io/badge/Patreon-%D0%9F%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C-F96854?logo=patreon&logoColor=white)](https://www.patreon.com/Frenodin)
+
 ## Благодарности
 - [BepInEx](https://github.com/BepInEx/BepInEx), входит в релизный архив по лицензии LGPL-2.1, и [Il2CppInterop](https://github.com/BepInEx/Il2CppInterop).
 - [Harmony](https://github.com/pardeike/Harmony).
