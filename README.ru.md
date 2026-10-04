@@ -4,11 +4,29 @@
 
 **Графика, FPS и исправления для Neptunia Game Maker R:Evolution**
 
-NepFix это неофициальный мод для PC-версии игры в Steam. Он снимает лимит 60 FPS, поднимает качество картинки выше пресетов игры, добавляет экранное освещение NepFX и исправляет ошибки движка, которые проявляются на высокой частоте кадров. Все настройки меняются прямо в игре через меню по клавише **F10**, перезапуск не нужен.
+NepFix это неофициальный мод для PC-версии игры в Steam. Он снимает лимит 60 FPS, поднимает качество картинки выше пресетов игры, добавляет экранное освещение NepFX и исправляет ошибки движка, которые проявляются на высокой частоте кадров. Все настройки меняются прямо в игре через меню по клавише **F10**, перезапуск не нужен. Меню доступно на **русском и английском**.
 
 Мод не меняет тексты и не содержит перевода. Русификатор выходит отдельно.
 
 ---
+
+## Скриншоты
+![Меню NepFix](docs/screenshots/showcase.png)
+
+Скриншоты сделаны с английским интерфейсом, русский включается кнопкой в заголовке меню.
+
+<details>
+<summary><b>Все вкладки меню</b></summary>
+
+<table>
+<tr><td align="center"><a href="docs/screenshots/01-display.png"><img src="docs/screenshots/01-display.png" width="260" alt="Экран"><br><sub>Экран</sub></a></td><td align="center"><a href="docs/screenshots/02-quality.png"><img src="docs/screenshots/02-quality.png" width="260" alt="Качество"><br><sub>Качество</sub></a></td><td align="center"><a href="docs/screenshots/03-anti-aliasing.png"><img src="docs/screenshots/03-anti-aliasing.png" width="260" alt="Сглаживание"><br><sub>Сглаживание</sub></a></td></tr>
+<tr><td align="center"><a href="docs/screenshots/04-shadows.png"><img src="docs/screenshots/04-shadows.png" width="260" alt="Тени"><br><sub>Тени</sub></a></td><td align="center"><a href="docs/screenshots/05-distance.png"><img src="docs/screenshots/05-distance.png" width="260" alt="Дальность"><br><sub>Дальность</sub></a></td><td align="center"><a href="docs/screenshots/06-characters.png"><img src="docs/screenshots/06-characters.png" width="260" alt="Персонажи"><br><sub>Персонажи</sub></a></td></tr>
+<tr><td align="center"><a href="docs/screenshots/07-characters-bike.png"><img src="docs/screenshots/07-characters-bike.png" width="260" alt="Мотоцикл и голос"><br><sub>Мотоцикл и голос</sub></a></td><td align="center"><a href="docs/screenshots/08-fixes.png"><img src="docs/screenshots/08-fixes.png" width="260" alt="Исправления"><br><sub>Исправления</sub></a></td><td align="center"><a href="docs/screenshots/09-monitoring.png"><img src="docs/screenshots/09-monitoring.png" width="260" alt="Мониторинг"><br><sub>Мониторинг</sub></a></td></tr>
+<tr><td align="center"><a href="docs/screenshots/10-overlay.png"><img src="docs/screenshots/10-overlay.png" width="260" alt="Оверлей"><br><sub>Оверлей</sub></a></td><td align="center"><a href="docs/screenshots/11-performance.png"><img src="docs/screenshots/11-performance.png" width="260" alt="Оптимизация"><br><sub>Оптимизация</sub></a></td><td align="center"><a href="docs/screenshots/12-lighting.png"><img src="docs/screenshots/12-lighting.png" width="260" alt="Освещение"><br><sub>Освещение</sub></a></td></tr>
+<tr><td align="center"><a href="docs/screenshots/13-lighting-nepfx.png"><img src="docs/screenshots/13-lighting-nepfx.png" width="260" alt="NepFX"><br><sub>NepFX</sub></a></td><td align="center"><a href="docs/screenshots/14-lighting-ssr.png"><img src="docs/screenshots/14-lighting-ssr.png" width="260" alt="Отражения и тени"><br><sub>Отражения и тени</sub></a></td><td align="center"><a href="docs/screenshots/15-lighting-quality.png"><img src="docs/screenshots/15-lighting-quality.png" width="260" alt="Качество эффекта"><br><sub>Качество эффекта</sub></a></td></tr>
+</table>
+
+</details>
 
 ## Возможности
 
@@ -82,7 +100,8 @@ NepFix это неофициальный мод для PC-версии игры 
 - В меню видно, что сейчас ограничивает FPS: процессор или видеокарта.
 
 ### Меню, мониторинг и диагностика
-- Меню на русском с вкладками. Возле каждого параметра серым показано рекомендованное значение.
+- Меню на русском и английском. Язык выбирается по языку системы, переключается кнопкой в заголовке меню или на вкладке «Экран».
+- Возле каждого параметра серым показано рекомендованное значение.
 - Оверлей мониторинга на **F11**: FPS, время кадра, загрузка GPU, график. Четыре режима, выбор угла экрана и прозрачности.
 - Журнал фризов: каждая заметная задержка попадает в лог с временем кадра, сборкой мусора и работой самого мода в этом кадре. Так видно, кто виноват, мод или игра.
 - Мод сам подбирает способ чтения глубины, чтобы не было ошибок MSAA, и запоминает выбор между запусками.

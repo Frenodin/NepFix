@@ -79,7 +79,7 @@ namespace NepFix
 
         public static void Draw(float scale, int mode)
         {
-            if (cache == null || cacheMode != mode || Time.unscaledTime - cacheT > 0.25f) { cache = Lines(mode >= 2); cacheMode = mode; cacheT = Time.unscaledTime; }
+            if (cache == null || cacheMode != mode || Time.unscaledTime - cacheT > 0.25f) { cache = Lines(mode >= 2); for (int k = 0; k < cache.Count; k++) cache[k] = Loc.T(cache[k]); cacheMode = mode; cacheT = Time.unscaledTime; }
             var lines = cache;
             float lh = 20, gh = mode >= 3 ? 60 : 0;
             int maxLen = 0; foreach (var s in lines) maxLen = Math.Max(maxLen, s.Length);
@@ -123,7 +123,7 @@ namespace NepFix
                     GUI.DrawTexture(new Rect(gx + i * bw, gy + gh - bh, Math.Max(1, bw), bh), tex);
                 }
                 GUI.color = old;
-                GUI.Label(new Rect(gx + 4, gy, 300, 20), $"время кадра, шкала {scaleMs:0} мс");
+                GUI.Label(new Rect(gx + 4, gy, 300, 20), Loc.T($"время кадра, шкала {scaleMs:0} мс"));
             }
         }
 

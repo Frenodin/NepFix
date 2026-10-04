@@ -4,13 +4,27 @@
 
 **Graphics, FPS and bug fixes for Neptunia Game Maker R:Evolution**
 
-NepFix is an unofficial mod for the Steam PC version of the game. It removes the 60 FPS cap and raises image quality above the game's presets. It also adds NepFX screen-space lighting and fixes engine bugs that show up at high framerates. All settings are changed in-game from the **F10** menu, with no restart needed.
+NepFix is an unofficial mod for the Steam PC version of the game. It removes the 60 FPS cap and raises image quality above the game's presets. It also adds NepFX screen-space lighting and fixes engine bugs that show up at high framerates. All settings are changed in-game from the **F10** menu, with no restart needed. The menu is available in **English and Russian**.
 
 The mod does not touch any game text and contains no translation.
 
-> **Note:** the in-game menu is currently in Russian only. An English menu is planned for an upcoming version.
-
 ---
+
+## Screenshots
+![NepFix menu](docs/screenshots/showcase.png)
+
+<details>
+<summary><b>All menu tabs</b></summary>
+
+<table>
+<tr><td align="center"><a href="docs/screenshots/01-display.png"><img src="docs/screenshots/01-display.png" width="260" alt="Display"><br><sub>Display</sub></a></td><td align="center"><a href="docs/screenshots/02-quality.png"><img src="docs/screenshots/02-quality.png" width="260" alt="Quality"><br><sub>Quality</sub></a></td><td align="center"><a href="docs/screenshots/03-anti-aliasing.png"><img src="docs/screenshots/03-anti-aliasing.png" width="260" alt="Anti-aliasing"><br><sub>Anti-aliasing</sub></a></td></tr>
+<tr><td align="center"><a href="docs/screenshots/04-shadows.png"><img src="docs/screenshots/04-shadows.png" width="260" alt="Shadows"><br><sub>Shadows</sub></a></td><td align="center"><a href="docs/screenshots/05-distance.png"><img src="docs/screenshots/05-distance.png" width="260" alt="Distance"><br><sub>Distance</sub></a></td><td align="center"><a href="docs/screenshots/06-characters.png"><img src="docs/screenshots/06-characters.png" width="260" alt="Characters"><br><sub>Characters</sub></a></td></tr>
+<tr><td align="center"><a href="docs/screenshots/07-characters-bike.png"><img src="docs/screenshots/07-characters-bike.png" width="260" alt="Bike and voice"><br><sub>Bike and voice</sub></a></td><td align="center"><a href="docs/screenshots/08-fixes.png"><img src="docs/screenshots/08-fixes.png" width="260" alt="Fixes"><br><sub>Fixes</sub></a></td><td align="center"><a href="docs/screenshots/09-monitoring.png"><img src="docs/screenshots/09-monitoring.png" width="260" alt="Monitoring"><br><sub>Monitoring</sub></a></td></tr>
+<tr><td align="center"><a href="docs/screenshots/10-overlay.png"><img src="docs/screenshots/10-overlay.png" width="260" alt="Overlay"><br><sub>Overlay</sub></a></td><td align="center"><a href="docs/screenshots/11-performance.png"><img src="docs/screenshots/11-performance.png" width="260" alt="Performance"><br><sub>Performance</sub></a></td><td align="center"><a href="docs/screenshots/12-lighting.png"><img src="docs/screenshots/12-lighting.png" width="260" alt="Lighting"><br><sub>Lighting</sub></a></td></tr>
+<tr><td align="center"><a href="docs/screenshots/13-lighting-nepfx.png"><img src="docs/screenshots/13-lighting-nepfx.png" width="260" alt="NepFX"><br><sub>NepFX</sub></a></td><td align="center"><a href="docs/screenshots/14-lighting-ssr.png"><img src="docs/screenshots/14-lighting-ssr.png" width="260" alt="Reflections and shadows"><br><sub>Reflections and shadows</sub></a></td><td align="center"><a href="docs/screenshots/15-lighting-quality.png"><img src="docs/screenshots/15-lighting-quality.png" width="260" alt="Effect quality"><br><sub>Effect quality</sub></a></td></tr>
+</table>
+
+</details>
 
 ## Features
 
@@ -84,6 +98,7 @@ A custom shader injected into the game's URP pipeline.
 - **Bottleneck readout:** the menu shows whether the CPU or the GPU is limiting FPS.
 
 ### Menu, monitoring and diagnostics
+- **English and Russian menu.** The language follows your system by default and can be switched with the button in the menu's title bar or on the Display tab.
 - **Recommended values:** every setting shows its recommended value next to it.
 - **Performance overlay on F11:** FPS, frame time, GPU load and a graph. Four modes, with corner and opacity settings.
 - **Freeze logger.** Every noticeable stall is logged with frame time, garbage collection and the mod's own work in that frame. It shows at a glance whether the mod or the game caused it.
@@ -101,7 +116,7 @@ Everything you need is in a single archive. There is no need to download BepInEx
 4. Launch the game through Steam. A black BepInEx console window will appear, which is expected. **The first launch takes 1–5 minutes** while BepInEx generates its files from the game code. Do not close the game, even if it looks frozen.
 5. In the main menu press **F10** to open the NepFix menu. **F11** toggles the FPS overlay.
 
-Later launches are fast. A good starting point is the «Баланс, рекомендуется» (Balanced) preset on the «Оптимизация» tab.
+Later launches are fast. A good starting point is the **Balanced, recommended** preset on the **Performance** tab.
 
 After extracting, the game folder should look like this:
 ```
@@ -125,7 +140,7 @@ If BepInEx is already installed, the smaller **`NepFix-x.x.x.zip`** without BepI
 | Game crashes on first launch | Delete `BepInEx\interop` and `BepInEx\cache`, then launch again. |
 | Steam Deck / Linux | Steam launch options: `WINEDLLOVERRIDES="winhttp=n,b" %command%` |
 
-Settings are stored in `BepInEx\config\casimoy.nepfix.cfg`. The «Сбросить вкладку» / «Сбросить всё» buttons (Reset tab / Reset all) restore the defaults.
+Settings are stored in `BepInEx\config\casimoy.nepfix.cfg`. The **Reset tab** and **Reset all** buttons restore the defaults.
 
 ## Uninstall
 - **Mod only:** delete `BepInEx\plugins\NepFix`.
@@ -134,8 +149,8 @@ Settings are stored in `BepInEx\config\casimoy.nepfix.cfg`. The «Сбросит
 The mod does not modify any game files.
 
 ## Tips
-- **Don't combine** «Шаг физики = 1/FPS» (physics step = 1/FPS) with «Плавное движение» (smooth movement). They do the same job in different ways.
-- **If NepFX draws dark spots or halos,** lower «Дальность эффекта» (effect distance) or turn off «Тени сверху и на открытом воздухе» (overhead shadows outdoors).
+- **Don't combine** "Physics step matched to FPS" with "Smooth party and bike movement". They do the same job in different ways.
+- **If NepFX draws dark spots or halos,** lower "Effect distance" or turn off "Overhead shadows outdoors without sun".
 - **Set an FPS limit** your PC can hold steadily.
 - **On NVIDIA GPUs, DLDSR** in the control panel gives an even sharper image. It works on top of DX11 together with the mod.
 

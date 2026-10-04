@@ -95,12 +95,14 @@ namespace NepFix
             HandleDrag(h);
             var win = new Rect(px, py, W, h);
             for (int i = 0; i < 4; i++) GUI.Box(win, "");
-            GUI.Label(new Rect(win.x + Pad, win.y + 8, W - 2 * Pad, 24), $"≡ NepFix {Plugin.Version} — графика и исправления   [{S.MenuKey.Value} — закрыть, тянуть за заголовок]");
+            GUI.Label(new Rect(win.x + Pad, win.y + 8, W - 2 * Pad - 130, 24), Loc.T($"≡ NepFix {Plugin.Version} — графика и исправления   [{S.MenuKey.Value} — закрыть, тянуть за заголовок]"));
+            if (GUI.Button(new Rect(win.xMax - Pad - 124, win.y + 6, 124, 24), Loc.En ? "Language: EN" : "Язык: RU"))
+                S.Language.Value = Loc.En ? "ru" : "en";
 
             string[] tabs = { "Экран", "Качество", "Сглаживание", "Тени", "Дальность", "Персонажи", "Исправления", "Мониторинг", "Моды", "Оверлей", "Оптимизация", "Освещение" }; // вкладка «Анимации» (case 12) скрыта до доработки
             float tw = (W - 2 * Pad) / 7;
             for (int i = 0; i < tabs.Length; i++)
-                if (GUI.Button(new Rect(win.x + Pad + (i % 7) * tw, win.y + 36 + (i / 7) * 32, tw - 4, 28), (i == tab ? "» " : "") + tabs[i]))
+                if (GUI.Button(new Rect(win.x + Pad + (i % 7) * tw, win.y + 36 + (i / 7) * 32, tw - 4, 28), (i == tab ? "» " : "") + Loc.T(tabs[i])))
                 {
                     tab = i; scroll = 0;
                     if (i == 8) { ModsInfo.Refresh(); ModsInfo.CheckTextures(); }
@@ -122,13 +124,13 @@ namespace NepFix
 
             DrawPreview(win, h);
             float by = win.y + h - 40;
-            if (GUI.Button(new Rect(win.x + Pad, by, 180, 30), "Диагностика в лог")) { Plugin.L.LogInfo(Gfx.Diagnostics()); status = "Записано в LogOutput.log"; }
+            if (GUI.Button(new Rect(win.x + Pad, by, 180, 30), Loc.T("Диагностика в лог"))) { Plugin.L.LogInfo(Gfx.Diagnostics()); status = "Записано в LogOutput.log"; }
             if (tabEntries.Count > 0)
             {
-                if (GUI.Button(new Rect(win.x + Pad + 188, by, 180, 30), "Сбросить вкладку")) { ResetTab(); status = "Вкладка сброшена"; }
+                if (GUI.Button(new Rect(win.x + Pad + 188, by, 180, 30), Loc.T("Сбросить вкладку"))) { ResetTab(); status = "Вкладка сброшена"; }
             }
-            if (GUI.Button(new Rect(win.x + Pad + 376, by, 150, 30), "Сбросить всё")) { ResetDefaults(); status = "Все настройки сброшены"; }
-            GUI.Label(new Rect(win.x + Pad + 536, by + 5, 200, 24), status);
+            if (GUI.Button(new Rect(win.x + Pad + 376, by, 150, 30), Loc.T("Сбросить всё"))) { ResetDefaults(); status = "Все настройки сброшены"; }
+            GUI.Label(new Rect(win.x + Pad + 536, by + 5, 200, 24), Loc.T(status));
         }
 
         Rect areaRect; string hoverKey; bool mouseOk; float mouseX, mouseY;
@@ -157,12 +159,12 @@ namespace NepFix
             float yy = Math.Clamp(mouseY - 40, 0, Math.Max(0, sh - ph));
             var r = new Rect(x, yy, pw, ph);
             for (int i = 0; i < 5; i++) GUI.Box(r, "");
-            GUI.Label(new Rect(x + 10, yy + 6, pw - 20, 22), info.Title);
+            GUI.Label(new Rect(x + 10, yy + 6, pw - 20, 22), Loc.T(info.Title));
             GUI.DrawTexture(new Rect(x + 10, yy + 30, iw, ih), t);
             float half = (iw - 4) / 2;
-            GUI.Label(new Rect(x + 10, yy + 32 + ih, half, 22), info.Left);
-            GUI.Label(new Rect(x + 14 + half, yy + 32 + ih, half, 22), info.Right);
-            GUI.Label(new Rect(x + 10, yy + 56 + ih, pw - 20, 60), info.Text);
+            GUI.Label(new Rect(x + 10, yy + 32 + ih, half, 22), Loc.T(info.Left));
+            GUI.Label(new Rect(x + 14 + half, yy + 32 + ih, half, 22), Loc.T(info.Right));
+            GUI.Label(new Rect(x + 10, yy + 56 + ih, pw - 20, 60), Loc.T(info.Text));
         }
 
         bool dragging; float dragDX, dragDY; bool lmbWas; float px = -1, py = -1;
@@ -196,13 +198,16 @@ namespace NepFix
             switch (tab)
             {
                 case 0:
+                    Cycle(Loc.En ? "Language / Язык" : "Язык / Language", S.Language.Value == "ru" ? "Русский" : S.Language.Value == "en" ? "English" : (Loc.En ? "auto: English" : "авто: русский"),
+                        () => S.Language.Value = S.Language.Value == "ru" ? "auto" : S.Language.Value == "en" ? "ru" : "en",
+                        () => S.Language.Value = S.Language.Value == "ru" ? "en" : S.Language.Value == "en" ? "auto" : "ru");
                     Toggle("Управлять FPS, снять лимит 60", S.FpsUnlock);
                     IntChoice("Лимит FPS", S.FpsLimit, new[] { 0, 30, 60, 90, 120, 144, 165, 240 },
                         new[] { $"как монитор, {Gfx.Refresh}", "30", "60", "90", "120", "144", "165", "240" });
                     Toggle("Вертикальная синхронизация", S.VSync);
                     IntChoice("Кадров в очереди GPU", S.MaxQueuedFrames, new[] { 0, 1, 2, 3 }, new[] { "как в игре", "1, минимальная задержка", "2", "3" });
                     IntChoice("Оверлей мониторинга", S.HudMode, new[] { 0, 1, 2, 3 }, new[] { "выкл", "компактный", "подробный", "подробный + график" });
-                    Note("Рендер: " + Gfx.Backend + ".");
+                    Note(Loc.T("Рендер: ") + Loc.T(Gfx.Backend) + ".");
                     Note($"Текущая цель: {Gfx.TargetFps} FPS. Скорость игры привязана к целевому FPS: ставьте значение, которое ПК стабильно держит.");
                     break;
                 case 1:
@@ -267,7 +272,7 @@ namespace NepFix
                     Note(S.BikeProbe.Value ? BikeProbe.Info : "Включите, сядьте на мотоцикл и поездите минуту: повороты, ускорение, пару столкновений. Каждый замер пишется в отдельный файл BepInEx\\NepFix_bike_дата_время.csv.");
                     Header("Голос");
                     Slider("Пауза между фразами на карте", S.MapVoiceInterval, 0f, 120f, 5f, v => v <= 0.01f ? "как в игре" : $"{v:0} с");
-                    Note(Voices.Info + " Разговоры в сценах и по кнопке взаимодействия не затрагиваются.");
+                    Note(Loc.T(Voices.Info) + Loc.T(" Разговоры в сценах и по кнопке взаимодействия не затрагиваются."));
                     Note($"Обработано материалов персонажей: {Chars.Count}. Контур в игре рассчитан на 1080p, на 1440p он тоньше и рвётся; «авто» масштабирует по разрешению.");
                     break;
                 case 6:
@@ -283,7 +288,7 @@ namespace NepFix
                     Note($"Сглаживается персонажей: {Smooth.Count}. Игра прижимает персонажей к земле 50 раз в секунду, а кадров больше, поэтому без сглаживания модель подпрыгивает по высоте.");
                     Toggle("Постановка ступней по земле", S.FootIK);
                     IntChoice("Физика волос и одежды", S.ClothRate, new[] { 0, 1, 2 }, new[] { "как в игре", "частота под FPS", "раз в кадр" });
-                    Note(ClothFix.Info + ". Если волосы дрожат, попробуйте «раз в кадр».");
+                    Note(Loc.T(ClothFix.Info) + Loc.T(". Если волосы дрожат, попробуйте «раз в кадр»."));
                     Note($"Компонентов постановки ступней в сцене: {FootFix.Count}. Если ноги дрожат при медленной ходьбе, выключите: ступни перестанут подстраиваться под неровности.");
                     Toggle("Подробный лог", S.VerboseLog);
                     break;
@@ -293,7 +298,7 @@ namespace NepFix
                     Info($"Источник данных GPU: {(Telemetry.Source == "NVML" ? "NVIDIA NVML" : "счётчики Windows (PDH)")}. Обновление раз в 0,5 с в фоновом потоке.");
                     break;
                 case 8:
-                    if (GUI.Button(new Rect(0, y, 220, 26), ModsInfo.Busy ? "Проверка…" : "Обновить список")) { ModsInfo.Refresh(); ModsInfo.CheckTextures(); }
+                    if (GUI.Button(new Rect(0, y, 220, 26), Loc.T(ModsInfo.Busy ? "Проверка…" : "Обновить список"))) { ModsInfo.Refresh(); ModsInfo.CheckTextures(); }
                     y += RowH + 4;
                     foreach (var r in ModsInfo.Rows)
                     {
@@ -301,21 +306,21 @@ namespace NepFix
                         GUI.color = r.Level == 0 ? new Color(0.55f, 1f, 0.55f, 1f) : r.Level == 1 ? new Color(1f, 0.85f, 0.4f, 1f) : new Color(0.75f, 0.75f, 0.75f, 1f);
                         GUI.Label(new Rect(0, y, 30, RowH), r.Level == 0 ? "●" : r.Level == 1 ? "◐" : "○");
                         GUI.color = c;
-                        GUI.Label(new Rect(22, y, 330, RowH), r.Name);
-                        GUI.Label(new Rect(355, y, 160, RowH), r.State);
-                        GUI.Label(new Rect(520, y, 200, RowH), r.Kind);
+                        GUI.Label(new Rect(22, y, 330, RowH), Loc.T(r.Name));
+                        GUI.Label(new Rect(355, y, 160, RowH), Loc.T(r.State));
+                        GUI.Label(new Rect(520, y, 200, RowH), Loc.T(r.Kind));
                         y += 20;
-                        if (!string.IsNullOrEmpty(r.Detail)) { GUI.Label(new Rect(22, y, W - 70, RowH), "   " + r.Detail); y += 24; }
+                        if (!string.IsNullOrEmpty(r.Detail)) { GUI.Label(new Rect(22, y, W - 70, RowH), "   " + Loc.T(r.Detail)); y += 24; }
                         y += 4;
                     }
-                    Note("HD-текстуры по данным из памяти игры: " + ModsInfo.TexReport);
+                    Note(Loc.T("HD-текстуры по данным из памяти игры: ") + Loc.T(ModsInfo.TexReport));
                     break;
                 case 10:
                     Note($"Сейчас FPS ограничивает: {Optimize.Bottleneck()}. GPU {(Telemetry.GpuLoad < 0 ? "—" : Telemetry.GpuLoad.ToString("0") + "%")}, FPS {FrameStats.Fps:0} из {Gfx.TargetFps}.");
-                    GUI.Label(new Rect(0, y, 200, RowH), "Готовые пресеты:");
-                    if (GUI.Button(new Rect(170, y, 170, 26), "Макс. качество")) Optimize.Preset(0);
-                    if (GUI.Button(new Rect(350, y, 170, 26), "Баланс, рекомендуется")) Optimize.Preset(1);
-                    if (GUI.Button(new Rect(530, y, 170, 26), "Макс. FPS")) Optimize.Preset(2);
+                    GUI.Label(new Rect(0, y, 200, RowH), Loc.T("Готовые пресеты:"));
+                    if (GUI.Button(new Rect(170, y, 170, 26), Loc.T("Макс. качество"))) Optimize.Preset(0);
+                    if (GUI.Button(new Rect(350, y, 170, 26), Loc.T("Баланс, рекомендуется"))) Optimize.Preset(1);
+                    if (GUI.Button(new Rect(530, y, 170, 26), Loc.T("Макс. FPS"))) Optimize.Preset(2);
                     y += RowH + 6;
                     Toggle("Не считать скиннинг вне кадра", S.SkinOffscreenOff);
                     Toggle("Физика без авто-синхронизации, могут дрожать ноги", S.PhysicsNoAutoSync);
@@ -339,10 +344,10 @@ namespace NepFix
                     Slider("Радиус SSAO", S.SsaoRadiusMul, 0.25f, 3f, 0.05f, v => $"{v:0.00}x", "SsaoRadiusMul");
                     Toggle("SSAO высокого качества", S.SsaoHighQuality, "SsaoHighQuality");
                     Note(Lighting.SceneInfo);
-                    Note(Lighting.Summary + " " + Lighting.SsaoInfo);
+                    Note(Loc.T(Lighting.Summary) + " " + Loc.T(Lighting.SsaoInfo));
                     Header("NepFX, трассировка лучей по экрану");
                     Toggle("Включить NepFX", S.FxEnabled, "FxEnabled");
-                    Note("Состояние: " + NepFX.Status + ". Работа: " + NepFX.Diag + ".");
+                    Note(Loc.T("Состояние: ") + Loc.T(NepFX.Status) + Loc.T(". Работа: ") + Loc.T(NepFX.Diag) + ".");
                     Toggle("Сравнение половинами экрана", S.FxSplit, "FxSplit");
                     Toggle("Применять в меню и на портретах отряда", S.FxInMenus);
                     Slider("Эффект на персонажах", S.FxCharStrength, 0f, 1f, 0.05f, v => v <= 0.001f ? "нет" : $"{v * 100:0}%", "FxCharStrength");
@@ -386,7 +391,7 @@ namespace NepFix
                     Toggle("Использовать сторонние анимации", S.CustomIdles);
                     Slider("Доля среди жестов", S.CustomShare, 0f, 1f, 0.05f, v => $"{v * 100:0}%");
                     Slider("Длительность", S.CustomDuration, 3f, 20f, 1f, v => $"{v:0} с");
-                    Note("Сторонние: " + CustomIdles.Status);
+                    Note(Loc.T("Сторонние: ") + Loc.T(CustomIdles.Status));
                     Header("Поверх любой анимации");
                     Toggle("Дыхание", S.IdleBreath);
                     Slider("Сила дыхания", S.IdleBreathAmount, 0f, 2.5f, 0.1f, v => $"{v:0.0}");
@@ -416,8 +421,8 @@ namespace NepFix
         {
             drawn.Add(e);
             Hover(pv, RowH);
-            GUI.Label(LabelRect(), label);
-            bool v = GUI.Toggle(CtrlRect(), e.Value, e.Value ? " Вкл" : " Выкл");
+            GUI.Label(LabelRect(), Loc.T(label));
+            bool v = GUI.Toggle(CtrlRect(), e.Value, Loc.T(e.Value ? " Вкл" : " Выкл"));
             if (v != e.Value) e.Value = v;
             y += RowH;
             RecLine(e);
@@ -427,10 +432,10 @@ namespace NepFix
         void Cycle(string label, string shown, Action prev, Action next, string pv = null)
         {
             Hover(pv, RowH);
-            GUI.Label(LabelRect(), label);
+            GUI.Label(LabelRect(), Loc.T(label));
             var r = CtrlRect();
             if (GUI.Button(new Rect(r.x, r.y, 30, r.height), "<")) prev();
-            GUI.Label(new Rect(r.x + 38, r.y + 3, r.width - 76, r.height), shown);
+            GUI.Label(new Rect(r.x + 38, r.y + 3, r.width - 76, r.height), Loc.T(shown));
             if (GUI.Button(new Rect(r.xMax - 30, r.y, 30, r.height), ">")) next();
             y += RowH;
         }
@@ -464,7 +469,7 @@ namespace NepFix
         {
             drawn.Add(e);
             Hover(pv, RowH);
-            GUI.Label(LabelRect(), label + ": " + fmt(e.Value));
+            GUI.Label(LabelRect(), Loc.T(label) + ": " + Loc.T(fmt(e.Value)));
             float v = GUI.HorizontalSlider(new Rect(LabelW, y + 8, W - 2 * Pad - 18 - LabelW, RowH - 8), e.Value, min, max);
             v = (float)Math.Round(v / step) * step;
             if (Math.Abs(v - e.Value) > step * 0.5f) e.Value = v;
@@ -478,7 +483,7 @@ namespace NepFix
             string r = Rec.Get(e);
             if (r == null) return;
             var c = GUI.color; GUI.color = new Color(0.62f, 0.66f, 0.72f, 1f);
-            GUI.Label(new Rect(LabelW, y - 9, W - 2 * Pad - 18 - LabelW, 20), "рекомендуется: " + r);
+            GUI.Label(new Rect(LabelW, y - 9, W - 2 * Pad - 18 - LabelW, 20), Loc.T("рекомендуется: ") + Loc.T(r));
             GUI.color = c;
             y += 10;
         }
@@ -488,7 +493,7 @@ namespace NepFix
         {
             y += 4;
             var c = GUI.color; GUI.color = new Color(1f, 0.85f, 0.45f, 1f);
-            GUI.Label(new Rect(0, y, W - 2 * Pad - 18, RowH), text);
+            GUI.Label(new Rect(0, y, W - 2 * Pad - 18, RowH), Loc.T(text));
             GUI.color = c;
             y += 26;
         }
@@ -496,7 +501,7 @@ namespace NepFix
         [HideFromIl2Cpp]
         void Info(string text)
         {
-            GUI.Label(new Rect(0, y, W - 2 * Pad - 18, RowH), text);
+            GUI.Label(new Rect(0, y, W - 2 * Pad - 18, RowH), Loc.T(text));
             y += 22;
         }
 
@@ -504,7 +509,7 @@ namespace NepFix
         void Note(string text)
         {
             y += 6;
-            GUI.Label(new Rect(0, y, W - 2 * Pad - 18, RowH * 2), text);
+            GUI.Label(new Rect(0, y, W - 2 * Pad - 18, RowH * 2), Loc.T(text));
             y += RowH * 2;
         }
 
