@@ -18,10 +18,14 @@ namespace NepFix
         string status = "";
         bool diagOnce, modsInit;
 
+        bool guiInit;
+
         void Update()
         {
             float dt = Time.unscaledDeltaTime;
             Prof.Frame(dt);
+            // все элементы меню размечаются вручную через GUI.*, без GUILayout: служебный проход разметки IMGUI не нужен
+            if (!guiInit) { guiInit = true; try { useGUILayout = false; } catch { } }
             tFast += dt; tSlow += dt;
             if (tFast >= 0.5f) { tFast = 0; Gfx.Enforce(); }
             if (SlowDue(tSlow))
@@ -31,29 +35,42 @@ namespace NepFix
             }
 
             Gfx.EnforceObjectsTick();
-            try { Prof.Run("lod-tick", Distance.Tick); } catch { }
-            try { Prof.Run("interp", Interp.Update); } catch { }
-            try { Prof.Run("bike", Bike.Update); } catch { }
+            Step("lod-tick", Distance.Tick);
+            Step("gloss", Gloss.Update);
+            Step("textures", Optimize.Tick);
+            Step("unit-stuck", UnitStuck.Tick);
+            Step("interp", Interp.Update);
+            Step("bike", Bike.Update);
+            try { NepFX.Housekeeping(); } catch { }
             FrameStats.Push(dt);
             MsaaWatch.Tick();
             // IdleLife отключён до доработки: жесты, сторонние анимации, дыхание, взгляд
             if (!modsInit && Time.realtimeSinceStartup > 5f) { modsInit = true; ModsInfo.Refresh(); Pipeline.Hook(); }
-            bool hk = Application.isFocused && (Win32.GetAsyncKeyState(Win32.KeyToVk(S.HudKey.Value)) & 0x8000) != 0;
+            bool focused = Application.isFocused;
+            bool hk = focused && (Win32.GetAsyncKeyState(Win32.KeyToVk(S.HudKey.Value)) & 0x8000) != 0;
             if (hk && !hudKeyWas) S.HudMode.Value = (S.HudMode.Value + 1) % 4;
             hudKeyWas = hk;
             fpsAcc += dt; fpsFrames++;
             if (fpsAcc >= 0.5f) { fpsShown = fpsFrames / fpsAcc; fpsAcc = 0; fpsFrames = 0; }
 
-            bool down = Application.isFocused && (Win32.GetAsyncKeyState(Win32.KeyToVk(S.MenuKey.Value)) & 0x8000) != 0;
+            bool down = focused && (Win32.GetAsyncKeyState(Win32.KeyToVk(S.MenuKey.Value)) & 0x8000) != 0;
             if (down && !keyWasDown) Toggle();
             keyWasDown = down;
+        }
+
+        [HideFromIl2Cpp]
+        static void Step(string name, Action a)
+        {
+            long t = Prof.Begin();
+            try { a(); } catch { }
+            Prof.End(name, t);
         }
 
         static int slowScene = int.MinValue; static float slowSceneT;
         static bool SlowDue(float t)
         {
             float now = Time.unscaledTime;
-            int sc = UnityEngine.SceneManagement.SceneManager.GetActiveScene().handle;
+            int sc = Scan.Scene;
             if (sc != slowScene) { slowScene = sc; slowSceneT = now; }
             float since = now - slowSceneT;
             // сразу после смены сцены почаще, пока она догружается; дальше раз в 30 секунд: полный обход объектов давал фриз
@@ -62,7 +79,13 @@ namespace NepFix
 
         void FixedUpdate() { BikeProbe.FixedTick(); }
 
-        void LateUpdate() { try { Prof.Run("chars-quick", Chars.Quick); } catch { } try { Prof.Run("smooth", Smooth.LateUpdate); } catch { } try { CombatSmooth.LateUpdate(); } catch { } try { BikeProbe.LateUpdate(); } catch { }  }
+        void LateUpdate()
+        {
+            Step("chars-quick", Chars.Quick);
+            Step("smooth", Smooth.LateUpdate);
+            Step("weapon", CombatSmooth.LateUpdate);
+            if (S.BikeProbe.Value || BikeProbe.Pending) Step("bike-probe", BikeProbe.LateUpdate);
+        }
 
         [HideFromIl2Cpp]
         void Toggle()
@@ -83,12 +106,24 @@ namespace NepFix
 
         void OnGUI()
         {
+            int hud = S.HudMode.Value;
+            if (hud == 0 && !menuOpen) return;
+            long t0 = Prof.Begin();
+            try { DrawGui(hud); } finally { Prof.End("gui", t0); }
+        }
+
+        [HideFromIl2Cpp]
+        void DrawGui(int hud)
+        {
+            var ev = Event.current;
+            bool repaint = ev != null && ev.type == EventType.Repaint;
+            if (!menuOpen && !repaint) return; // оверлей только рисуется, остальные события IMGUI ему не нужны
             scale = Math.Max(1f, Screen.height / 1080f);
             var m = new Matrix4x4();
             m.m00 = scale; m.m11 = scale; m.m22 = 1; m.m33 = 1;
             GUI.matrix = m;
 
-            if (S.HudMode.Value > 0) Hud.Draw(scale, S.HudMode.Value);
+            if (hud > 0 && repaint) Hud.Draw(scale, hud);
             if (!menuOpen) return;
 
             float h = Math.Min(Screen.height / scale - 40, 760);
