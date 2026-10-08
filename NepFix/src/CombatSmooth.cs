@@ -64,6 +64,61 @@ namespace NepFix
             pending.Add(new Pending { chara = c, state = state, at = Time.unscaledTime + Duration });
         }
 
+        /// Игра снова достала оружие, пока ещё шло отложенное скрытие: скрытие отменяем, а уменьшение разворачиваем
+        /// в появление с того же размера. Раньше отложенное скрытие срабатывало позже и прятало уже нужное оружие.
+        public static void CancelHide(DbModelChara c, int drawState)
+        {
+            var idx = Indices(drawState);
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                var p = pending[i];
+                if (p.chara.Pointer != c.Pointer) continue;
+                // здесь остаются только скрытия, целиком входящие в доставаемое (частичные выполнены в FlushPartial)
+                foreach (int a in Indices(p.state)) if (Array.IndexOf(idx, a) >= 0) { pending.RemoveAt(i); break; }
+            }
+            float now = Time.unscaledTime, d = Duration;
+            foreach (int a in idx)
+            {
+                var t = Weapon(c, a); if (t == null) continue;
+                var f = Find(t);
+                if (f == null || f.grow) continue;
+                float k = Math.Clamp((now - f.start) / d, 0f, 1f);
+                f.grow = true; f.start = now - (1f - k) * d; // плавная кривая симметрична: продолжаем с текущего размера
+            }
+        }
+
+        /// Перед тем как игра достанет часть оружия: если отложено скрытие большего набора (например, всего оружия),
+        /// выполняем его сразу, иначе остальное оружие осталось бы видимым в крошечном размере.
+        public static void FlushPartial(DbModelChara c, int drawState)
+        {
+            var idx = Indices(drawState);
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                var p = pending[i];
+                if (p.chara.Pointer != c.Pointer) continue;
+                var pi = Indices(p.state);
+                bool overlap = false, subset = true;
+                foreach (int a in pi) { if (Array.IndexOf(idx, a) >= 0) overlap = true; else subset = false; }
+                if (!overlap || subset) continue;
+                pending.RemoveAt(i);
+                Execute(p);
+            }
+        }
+
+        static void Execute(Pending p)
+        {
+            try { Bypass = true; p.chara.SetAnimationWeaponDrawState(p.state); }
+            catch (Exception e) { Plugin.L.LogWarning("Оружие: " + e.Message); }
+            finally { Bypass = false; }
+            // после скрытия возвращаем исходный размер, чтобы следующее появление было правильным
+            foreach (int idx in Indices(p.state))
+            {
+                var t = Weapon(p.chara, idx); if (t == null) continue;
+                var f = Find(t);
+                if (f != null && !f.grow) { t.localScale = f.orig; fades.Remove(f); }
+            }
+        }
+
         public static float Duration => Math.Clamp(S.WeaponFade.Value, 0.02f, 0.5f);
 
         /// Каждый кадр после анимации.
@@ -92,20 +147,7 @@ namespace NepFix
                 var p = pending[i];
                 if (now < p.at) continue;
                 pending.RemoveAt(i);
-                try
-                {
-                    Bypass = true;
-                    p.chara.SetAnimationWeaponDrawState(p.state);
-                }
-                catch (Exception e) { Plugin.L.LogWarning("Оружие: " + e.Message); }
-                finally { Bypass = false; }
-                // после скрытия возвращаем исходный размер, чтобы следующее появление было правильным
-                foreach (int idx in Indices(p.state))
-                {
-                    var t = Weapon(p.chara, idx); if (t == null) continue;
-                    var f = Find(t);
-                    if (f != null && !f.grow) { t.localScale = f.orig; fades.Remove(f); }
-                }
+                Execute(p);
             }
             Count = fades.Count;
         }
@@ -120,6 +162,7 @@ namespace NepFix
             if (!Plugin.S.WeaponSmooth.Value || CombatSmooth.Bypass) return;
             try
             {
+                if (state % 2 == 1) CombatSmooth.FlushPartial(__instance, state);
                 for (int i = 0; i < 4; i++) { var t = CombatSmooth.Weapon(__instance, i); __state[i] = t != null && t.gameObject.activeInHierarchy; }
             }
             catch { }
@@ -131,6 +174,7 @@ namespace NepFix
             try
             {
                 bool on = state % 2 == 1;
+                if (on) CombatSmooth.CancelHide(__instance, state);
                 foreach (int idx in CombatSmooth.Indices(state))
                 {
                     var t = CombatSmooth.Weapon(__instance, idx);

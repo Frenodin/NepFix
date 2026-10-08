@@ -36,9 +36,10 @@ namespace NepFix
             if (!Plugin.S.UnitStuckFix.Value || u == null) return;
             try
             {
+                Scan.AddMapUnit(u);
                 float now = Time.time;
                 var p = u.GetPosition(); p.y = 0;
-                if (tracks.Count > 2000) tracks.Clear();
+                if (tracks.Count > 4000) tracks.Clear(); // только скорости за последние доли секунды, их не жалко
                 if (!tracks.TryGetValue(u.Pointer, out var t)) { t = new Track { p0 = p, t0 = now, p1 = p, t1 = now }; tracks[u.Pointer] = t; return; }
                 if (now - t1Gap(t) > 1f) { t.p0 = p; t.t0 = now; t.speed = -1; }
                 t.p1 = p; t.t1 = now;
@@ -77,32 +78,58 @@ namespace NepFix
             catch { }
         }
         public static int Units, Fixed;
-        static int frame = -1;
+        static int tickScene = int.MinValue;
+        static float smoothDt = -1;
+        static int std = 60; static float stdT = -100, pruneT;
+        static readonly Dictionary<IntPtr, UnityEngine.Object> objs = new();
 
-        public static void Before(MapUnitBaseComponent u)
+        /// Раз в кадр из Update мода. Раньше это делал патч Harmony на MapUnitBaseComponent.Update: вызов через
+        /// interop на каждого юнита в каждом кадре. Теперь один проход по общему списку юнитов, а запись в игру
+        /// только когда множитель заметно изменился.
+        public static void Tick()
         {
-            if (!Plugin.S.UnitStuckFix.Value) return;
+            if (!Plugin.S.UnitStuckFix.Value) { if (seen.Count > 0) Restore(); return; }
             try
             {
-                if (Time.frameCount != frame)
-                {
-                    frame = Time.frameCount;
-                    if (seen.Count > 2000) seen.Clear();
-                    Units = seen.Count;
-                }
-                float cur = u.move_use_distance_;
-                IntPtr k = u.Pointer;
-                float orig;
-                if (seen.TryGetValue(k, out var s) && Math.Abs(cur - s.set) < 1e-7f) orig = s.orig;
-                else orig = cur; // новый юнит или игра сама поменяла порог
+                int sc = Scan.Scene;
+                float now = Time.unscaledTime;
+                // записи не очищаются при смене сцены: юниты, пережившие её, хранят уже изменённый порог,
+                // и он принялся бы за исходный. Убираются только записи уничтоженных юнитов.
+                if (sc != tickScene || now - pruneT > 5f) { if (sc != tickScene) tracks.Clear(); tickScene = sc; pruneT = now; Scan.PruneDestroyed(objs, seen); }
+                if (now - stdT > 5f) { stdT = now; try { std = GameTime.StandardFrameRate; } catch { } if (std <= 0) std = 60; }
                 float dt = Time.deltaTime;
-                int std = 60; try { std = GameTime.StandardFrameRate; } catch { } if (std <= 0) std = 60;
-                float f = dt > 0f ? Math.Clamp(dt * std, 0.05f, 1f) : 1f;
-                float want = orig * f;
-                if (Math.Abs(cur - want) > 1e-7f) { u.move_use_distance_ = want; Fixed++; }
-                seen[k] = (orig, want);
+                if (dt <= 0f) return; // пауза: порог не нужен
+                smoothDt = smoothDt < 0 ? dt : smoothDt + (dt - smoothDt) * 0.2f;
+                float f = Math.Clamp(smoothDt * std, 0.05f, 1f);
+                var units = Scan.MapUnits();
+                Units = units.Count;
+                for (int i = 0; i < units.Count; i++)
+                {
+                    var u = units[i];
+                    try
+                    {
+                        IntPtr k = u.Pointer;
+                        float cur = u.move_use_distance_;
+                        float orig;
+                        if (seen.TryGetValue(k, out var s) && cur == s.set) orig = s.orig;
+                        else orig = cur; // новый юнит или игра сама поменяла порог
+                        float want = orig * f;
+                        // запись только при заметной разнице: мелкие колебания времени кадра порогу не важны
+                        if (Math.Abs(cur - want) > want * 0.03f + 1e-7f) { u.move_use_distance_ = want; Fixed++; seen[k] = (orig, want); }
+                        else seen[k] = (orig, cur);
+                        objs[k] = u;
+                    }
+                    catch { }
+                }
             }
             catch { }
+        }
+
+        static void Restore()
+        {
+            foreach (var u in Scan.MapUnits(5f))
+                try { if (seen.TryGetValue(u.Pointer, out var s) && u.move_use_distance_ == s.set) u.move_use_distance_ = s.orig; } catch { }
+            seen.Clear(); objs.Clear();
         }
     }
 
@@ -113,9 +140,4 @@ namespace NepFix
         static void Postfix(MapMovePoint __instance, MapUnitBaseComponent unit_base) { UnitStuck.MoveAfter(__instance, unit_base); }
     }
 
-    [HarmonyPatch(typeof(MapUnitBaseComponent), "Update")]
-    internal static class PatchUnitStuck
-    {
-        static void Prefix(MapUnitBaseComponent __instance) { UnitStuck.Before(__instance); }
-    }
 }

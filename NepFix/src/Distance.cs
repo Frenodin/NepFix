@@ -15,8 +15,9 @@ namespace NepFix
         static readonly Dictionary<IntPtr, float> ourCamSum = new(), ourLightSum = new();
         static readonly Dictionary<IntPtr, (float cull, float[] d)> gameLod = new();
         public static string Summary = "";
-        static readonly Dictionary<IntPtr, (float orig, float mul)> groupState = new();
+        static readonly Dictionary<IntPtr, (float orig, float mul, float set)> groupState = new();
         static string lastLogged = "";
+        static readonly Dictionary<IntPtr, UnityEngine.Object> objs = new();
 
         static float Sum(float[] a) { float s = 0; foreach (var v in a) s += v; return s; }
 
@@ -33,21 +34,22 @@ namespace NepFix
         static readonly List<float> lodDue = new();
         static Il2CppReferenceArray<UnityEngine.Object> lodArr; static int lodIdx;
         static int lodChangedCur, lodChangedLast, lodCountLast; static float lodCullMin = 1, lodCullMax = 0, curMin = 1, curMax = 0;
-        const int LodPerFrame = 800;
+        /// Бюджет на кадр. Раньше было 800 групп за кадр: на тяжёлых картах GetLODs/SetLODs через interop давали фриз 90 мс.
+        const double LodBudgetMs = 0.8;
 
         static void SchedulePlan(float mul)
         {
             float now = Time.unscaledTime;
-            int sc = UnityEngine.SceneManagement.SceneManager.GetActiveScene().handle;
+            int sc = Scan.Scene;
             if (sc != lodScene)
             {
                 lodScene = sc; groupState.Clear(); lodArr = null; lodDue.Clear();
-                lodDue.Add(now + 1f); lodDue.Add(now + 6f);
+                lodDue.Add(now + 1f); lodDue.Add(now + 6f); lodDue.Add(now + 20f);
             }
             if (Math.Abs(mul - lodMul) > 0.01f) { lodMul = mul; if (lodDue.Count == 0 || lodDue[0] > now + 0.2f) lodDue.Insert(0, now); }
         }
 
-        /// Каждый кадр: обрабатывает не больше LodPerFrame групп.
+        /// Каждый кадр: обрабатывает группы LOD, пока не кончится бюджет времени.
         public static void Tick()
         {
             float now = Time.unscaledTime;
@@ -55,37 +57,44 @@ namespace NepFix
             {
                 if (lodDue.Count == 0 || now < lodDue[0]) return;
                 lodDue.RemoveAt(0);
-                try { lodArr = UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<LODGroup>()); } catch { lodArr = null; }
+                // множитель 1 и мод ещё ничего не менял: обходить нечего
+                if (Math.Abs(lodMul - 1f) < 0.01f && groupState.Count == 0) return;
+                try { lodArr = Scan.All<LODGroup>(); } catch { lodArr = null; }
                 lodIdx = 0; lodChangedCur = 0; curMin = 1; curMax = 0;
                 if (lodArr == null) return;
             }
             float mul = lodMul;
-            int end = Math.Min(lodArr.Length, lodIdx + LodPerFrame);
-            for (; lodIdx < end; lodIdx++)
+            long end = Scan.Now + Scan.Ms(LodBudgetMs);
+            int n = lodArr.Length;
+            for (int c = 0; lodIdx < n; lodIdx++, c++)
             {
+                if ((c & 15) == 15 && Scan.Now > end) break;
                 try
                 {
-                    var g = lodArr[lodIdx]?.TryCast<LODGroup>(); if (g == null) continue;
-                    IntPtr k = g.Pointer;
+                    IntPtr k = Scan.Raw(lodArr, lodIdx);
+                    if (k == IntPtr.Zero) continue;
                     if (groupState.TryGetValue(k, out var st) && Math.Abs(st.mul - mul) < 0.01f) { curMin = Math.Min(curMin, st.orig); curMax = Math.Max(curMax, st.orig); continue; }
+                    var g = lodArr[lodIdx]?.TryCast<LODGroup>(); if (g == null) continue;
                     var lods = g.GetLODs();
                     if (lods == null || lods.Length == 0) continue;
-                    int n = lods.Length;
-                    var last = lods[n - 1];
-                    float orig = st.mul > 0 ? st.orig : last.screenRelativeTransitionHeight;
+                    int ln = lods.Length;
+                    var last = lods[ln - 1];
+                    float cur = last.screenRelativeTransitionHeight;
+                    // игра могла сама поменять порог: тогда текущее значение и есть исходное
+                    float orig = st.mul > 0 && Math.Abs(cur - st.set) < 1e-5f ? st.orig : cur;
                     float want = mul >= 7.9f ? 0f : orig / mul;
-                    if (Math.Abs(last.screenRelativeTransitionHeight - want) > 1e-5f)
+                    if (Math.Abs(cur - want) > 1e-5f)
                     {
-                        last.screenRelativeTransitionHeight = want; lods[n - 1] = last; g.SetLODs(lods); lodChangedCur++;
+                        last.screenRelativeTransitionHeight = want; lods[ln - 1] = last; g.SetLODs(lods); lodChangedCur++;
                     }
-                    groupState[k] = (orig, mul);
+                    groupState[k] = (orig, mul, want);
                     curMin = Math.Min(curMin, orig); curMax = Math.Max(curMax, orig);
                 }
                 catch { }
             }
-            if (lodIdx >= lodArr.Length)
+            if (lodIdx >= n)
             {
-                lodCountLast = lodArr.Length; lodChangedLast = lodChangedCur; lodCullMin = curMin; lodCullMax = curMax;
+                lodCountLast = n; lodChangedLast = lodChangedCur; lodCullMin = curMin; lodCullMax = curMax;
                 lodArr = null;
             }
         }
@@ -115,6 +124,7 @@ namespace NepFix
                     var want = Scale(g, mul);
                     ourCamSum[k] = Sum(want);
                     if (Math.Abs(Sum(want) - cs) > 0.01f) cam.layerCullDistances = want;
+                    objs[k] = cam;
                 }
             }
             catch (Exception e) { sb.Append(" камеры: " + e.Message); }
@@ -122,7 +132,7 @@ namespace NepFix
             // тени источников света
             try
             {
-                var arr = UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<Light>());
+                var arr = Scan.All<Light>();
                 if (arr != null) foreach (var o in arr)
                 {
                     var l = o.TryCast<Light>(); if (l == null) continue;
@@ -132,7 +142,9 @@ namespace NepFix
                     if (curI == null || curI.Length == 0) continue;
                     var cur = (float[])curI;
                     float cs = Sum(cur);
-                    if (cs <= 0) continue;
+                    // без отсечения по слоям у игры нечего масштабировать; но если обнулил мод (без отсечения), это наша запись
+                    if (cs <= 0 && !ourLightSum.ContainsKey(k)) continue;
+                    objs[k] = l;
                     if (!gameLight.ContainsKey(k) || !ourLightSum.TryGetValue(k, out float os) || Math.Abs(cs - os) > 0.01f)
                         gameLight[k] = (float[])cur.Clone();
                     foreach (var v in gameLight[k]) if (v > 0) lightLayers++;
@@ -146,12 +158,12 @@ namespace NepFix
             // CombinedLODManager (объединённые меши окружения)
             try
             {
-                var arr = UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<MeshCombineStudio.CombinedLODManager>());
+                var arr = Scan.All<MeshCombineStudio.CombinedLODManager>();
                 if (arr != null) foreach (var o in arr)
                 {
                     var m = o.TryCast<MeshCombineStudio.CombinedLODManager>(); if (m == null) continue;
                     lodMgr++;
-                    IntPtr k = m.Pointer;
+                    IntPtr k = m.Pointer; objs[k] = m;
                     if (!gameLod.TryGetValue(k, out var g))
                     {
                         float[] d = m.distances != null ? (float[])m.distances : null;
@@ -164,8 +176,9 @@ namespace NepFix
                     if (g.d != null)
                     {
                         var cur = m.distances;
-                        if (cur != null && cur.Length == g.d.Length && Math.Abs(cur[0] - g.d[0] * mul) > 0.01f)
-                            m.distances = Scale(g.d, Math.Min(mul, 7.8f));
+                        float dm = Math.Min(mul, 7.8f);
+                        if (cur != null && cur.Length == g.d.Length && Math.Abs(cur[0] - g.d[0] * dm) > 0.01f)
+                            m.distances = Scale(g.d, dm);
                     }
                 }
             }
@@ -180,9 +193,8 @@ namespace NepFix
                       $". Тени по слоям: {lightLayers}. Групп LOD: {lodGroups}" + (lodGroups > 0 ? $", по игре объект исчезает, когда занимает меньше {cullMin * 100:0.#}–{cullMax * 100:0.#}% высоты экрана" : "") + $". Объединённых LOD: {lodMgr}.";
             string key = Summary + sb;
             if (key != lastLogged) { lastLogged = key; Plugin.L.LogInfo("Дальность: " + Summary + " Подробно:" + sb); }
-            if (gameCam.Count > 128) { gameCam.Clear(); ourCamSum.Clear(); }
-            if (gameLight.Count > 512) { gameLight.Clear(); ourLightSum.Clear(); }
-            if (gameLod.Count > 256) gameLod.Clear();
+            // записи уничтоженных объектов убираем; живые не трогаем, иначе изменённое модом значение принялось бы за исходное
+            Scan.PruneDestroyed(objs, gameCam, ourCamSum, gameLight, ourLightSum, gameLod);
         }
     }
 }

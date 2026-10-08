@@ -75,6 +75,10 @@ namespace NepFix
         [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr hWnd, ref POINT p);
         [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+        [DllImport("kernel32.dll")] static extern uint GetCurrentProcessId();
+        static uint myPid;
+        /// Раньше на каждый вызов создавался объект Process: в меню это было несколько раз за кадр.
+        static uint MyPid => myPid != 0 ? myPid : (myPid = GetCurrentProcessId());
 
         /// Позиция курсора в клиентских координатах окна игры (пиксели, начало — левый верхний угол).
         public static bool MouseClient(out float x, out float y)
@@ -83,7 +87,7 @@ namespace NepFix
             IntPtr w = GetForegroundWindow();
             if (w == IntPtr.Zero) return false;
             GetWindowThreadProcessId(w, out uint pid);
-            if (pid != (uint)System.Diagnostics.Process.GetCurrentProcess().Id) return false;
+            if (pid != MyPid) return false;
             if (!GetCursorPos(out var p) || !ScreenToClient(w, ref p)) return false;
             x = p.X; y = p.Y; return true;
         }
@@ -114,7 +118,18 @@ namespace NepFix
             return 60;
         }
 
+        static string vkKey1, vkKey2; static int vkVal1, vkVal2;
+        /// Код клавиши по названию из настроек; два последних запроса запоминаются, разбор строки не каждый кадр.
         public static int KeyToVk(string key)
+        {
+            if (ReferenceEquals(key, vkKey1)) return vkVal1;
+            if (ReferenceEquals(key, vkKey2)) return vkVal2;
+            int v = ParseVk(key);
+            vkKey2 = vkKey1; vkVal2 = vkVal1; vkKey1 = key; vkVal1 = v;
+            return v;
+        }
+
+        static int ParseVk(string key)
         {
             key = (key ?? "").Trim().ToUpperInvariant();
             if (key.StartsWith("F") && int.TryParse(key.Substring(1), out int n) && n >= 1 && n <= 12) return 0x70 + n - 1;

@@ -59,6 +59,7 @@ namespace NepFix
         // Performance
         public ConfigEntry<int> MaxQueuedFrames;
         public ConfigEntry<bool> FxEventMigrated, FxIndoorSunContact, ForceLightShadows, SsaoHighQuality, PipelineTest, FxEnabled, FxUseMotion, FxSplit, FxInMenus, FxIndoorShadows, FxOverheadAlways, FxSsr, FxSsrBlur;
+        public ConfigEntry<float> MenuOpacity;
         public ConfigEntry<float> FxSsrIntensity, FxSsrDistance, FxBlobStrength, FxIndoorLength, FxCharStrength, FxGiRadius, FxGiIntensity, FxAoIntensity, FxContactLength, FxContactIntensity, FxTemporal, FxFadeDistance;
         public ConfigEntry<int> FxSsrMode, FxRays, FxSteps, FxDebug, FxDepthSource, FxEvent;
         public ConfigEntry<int> MaxShadowedLights;
@@ -200,6 +201,7 @@ namespace NepFix
             HudMode = c.Bind("0.Меню", "HudMode", 2, Loc.T("Оверлей мониторинга: 0 выкл, 1 компактный, 2 подробный, 3 подробный + график."));
             HudCorner = c.Bind("0.Меню", "HudCorner", 1, Loc.T("Угол оверлея: 0 слева сверху, 1 справа сверху, 2 слева снизу, 3 справа снизу."));
             HudKey = c.Bind("0.Меню", "HudHotkey", "F11", Loc.T("Клавиша переключения режимов оверлея."));
+            MenuOpacity = c.Bind("0.Меню", "MenuOpacity", 0.85f, Loc.T("Непрозрачность фона меню (0–1). 1 = сплошной тёмный фон, удобно для скриншотов."));
             HudOpacity = c.Bind("0.Меню", "HudOpacity", 0.6f, Loc.T("Непрозрачность фона оверлея (0–1)."));
             ShowFps = c.Bind("0.Меню", "ShowFps", false, Loc.T("Счётчик FPS в углу."));
             VerboseLog = c.Bind("0.Меню", "VerboseLog", true, Loc.T("Подробный лог диагностики."));

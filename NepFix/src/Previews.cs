@@ -14,6 +14,7 @@ namespace NepFix
 
         static Dictionary<string, (int w, int h, byte[] z)> raw;
         static readonly Dictionary<string, Texture2D> tex = new();
+        static readonly HashSet<string> failed = new();
 
         public static readonly Dictionary<string, Info> Texts = new()
         {
@@ -103,7 +104,7 @@ namespace NepFix
         public static Texture2D Get(string key)
         {
             if (key == null) return null;
-            if (tex.TryGetValue(key, out var t) && t != null) return t;
+            if (tex.TryGetValue(key, out var t)) { if (t != null) return t; if (failed.Contains(key)) return null; }
             if (raw == null) Load();
             if (!raw.TryGetValue(key, out var r)) return null;
             try
@@ -120,7 +121,7 @@ namespace NepFix
                 tex[key] = t;
                 return t;
             }
-            catch (Exception e) { Plugin.L.LogWarning("Превью " + key + ": " + e.Message); tex[key] = null; return null; }
+            catch (Exception e) { Plugin.L.LogWarning("Превью " + key + ": " + e.Message); tex[key] = null; failed.Add(key); return null; }
         }
     }
 }

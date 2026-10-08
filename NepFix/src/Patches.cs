@@ -7,7 +7,7 @@ namespace NepFix
     {
         public static void Apply(Harmony h)
         {
-            foreach (var t in new[] { typeof(PatchMapReduction), typeof(PatchTargetFrameRate), typeof(PatchGameTimeUpdate), typeof(PatchAddRenderPasses), typeof(PatchWeaponDraw), typeof(PatchUnitAnimBlend), typeof(PatchUnitAnimBlendEnd), typeof(PatchVoiceDungeonRandom), typeof(PatchVoiceDungeon), typeof(PatchMapVoicePlay), typeof(PatchBikeCrash), typeof(PatchBikeCrashSoft), typeof(PatchBikeWallSoft), typeof(PatchUnitStuck), typeof(PatchMovePointStuck) })
+            foreach (var t in new[] { typeof(PatchMapReduction), typeof(PatchTargetFrameRate), typeof(PatchGameTimeUpdate), typeof(PatchAddRenderPasses), typeof(PatchWeaponDraw), typeof(PatchUnitAnimBlend), typeof(PatchUnitAnimBlendEnd), typeof(PatchVoiceDungeonRandom), typeof(PatchVoiceDungeon), typeof(PatchMapVoicePlay), typeof(PatchBikeCrash), typeof(PatchBikeCrashSoft), typeof(PatchBikeWallSoft), typeof(PatchMovePointStuck) })
             {
                 try { h.CreateClassProcessor(t).Patch(); Plugin.L.LogInfo("Патч применён: " + t.Name); }
                 catch (Exception e) { Plugin.L.LogWarning($"Патч {t.Name} не применён: {e.Message}"); }

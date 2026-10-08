@@ -21,9 +21,6 @@ namespace NepFix
         static Material mat;
         static bool triedLoad;
         public static string Status = "пакет шейдеров не загружен";
-        static RenderTexture histA, histB;
-        static Matrix4x4 prevVP;
-        static bool hasPrev;
         static int frame;
         public static Camera CurrentCamera;
         public static bool Indoor;
@@ -45,7 +42,14 @@ namespace NepFix
                 return s;
             }
         }
-        static readonly System.Collections.Generic.Dictionary<IntPtr, bool> camKind = new();
+        /// Состояние каждой камеры: тип (проверяется раз в секунду, а не каждый кадр) и своя история накопления.
+        /// Раньше история была общей на все камеры, и при эффекте в меню кадры разных камер смешивались.
+        class CamState
+        {
+            public Camera cam; public string name = ""; public bool skip; public string why = ""; public float checkedAt = -100, usedAt, seenAt;
+            public RenderTexture histA, histB; public Matrix4x4 prevVP; public bool hasPrev; public bool logged;
+        }
+        static readonly System.Collections.Generic.Dictionary<IntPtr, CamState> cams = new();
         static void Skip(string why) { SkipCount++; LastSkip = why; }
 
         static readonly int idSrc = Shader.PropertyToID("_NepSourceRT");
@@ -57,6 +61,18 @@ namespace NepFix
         static readonly int idDepth = Shader.PropertyToID("_NepDepthRT");
         static readonly int idMask = Shader.PropertyToID("_NepCharMaskRT");
         static readonly int idBlobs = Shader.PropertyToID("_NepBlobs");
+        static readonly int idParams = Shader.PropertyToID("_NepParams"), idParams2 = Shader.PropertyToID("_NepParams2"), idParams3 = Shader.PropertyToID("_NepParams3"),
+            idParams4 = Shader.PropertyToID("_NepParams4"), idLight = Shader.PropertyToID("_NepLight"), idFade = Shader.PropertyToID("_NepFade"), idFog2 = Shader.PropertyToID("_NepFog2"),
+            idSize = Shader.PropertyToID("_NepSize"), idPrevVP = Shader.PropertyToID("_NepPrevVP"), idDepthSrcMS = Shader.PropertyToID("_NepDepthSrcMS"),
+            idDepthSrc = Shader.PropertyToID("_NepDepthSrc"), idDepthTex = Shader.PropertyToID("_NepDepth"), idCamDepth = Shader.PropertyToID("_CameraDepthTexture"),
+            idCharMask = Shader.PropertyToID("_NepCharMask"), idSource = Shader.PropertyToID("_NepSource"), idBlobInfo = Shader.PropertyToID("_NepBlobInfo"),
+            idTraceTex = Shader.PropertyToID("_NepTrace"), idHistory = Shader.PropertyToID("_NepHistory"), idBlurSrc = Shader.PropertyToID("_NepBlurSrc"),
+            idGI = Shader.PropertyToID("_NepGI"), idSsr = Shader.PropertyToID("_NepSsr"), idGlossVal = Shader.PropertyToID("_NepGlossVal"),
+            idGlossMask = Shader.PropertyToID("_NepGlossMask"), idSSRTex = Shader.PropertyToID("_NepSSR"), idMotion = Shader.PropertyToID("_MotionVectorTexture");
+        static int pMs = -1, pMask = -1, pSsr = -1;
+        static CommandBuffer cmdBuf;
+        static RenderTargetIdentifier rtSrc = new(idSrc), rtTrace = new(idTrace), rtBlurA = new(idBlurA), rtBlurB = new(idBlurB), rtSsrA = new(idSsrA), rtSsrB = new(idSsrB),
+            rtGloss = new(idGloss), rtDepth = new(idDepth), rtMask = new(idMask), rtCamDepth = new(idCamDepth);
         public static string DepthInfo = "";
 
         static Shader shader;
@@ -90,6 +106,7 @@ namespace NepFix
                     bool again = triedLoad;
                     mat = new Material(shader);
                     mat.hideFlags = HideFlags.HideAndDontSave;
+                    pMs = mat.FindPass("CopyDepthMS"); pMask = mat.FindPass("CharMask"); pSsr = mat.FindPass("SSR");
                     triedLoad = true;
                     Status = $"загружен, {shader.name}, проходов {mat.passCount}";
                     Plugin.L.LogInfo("NepFX: " + Status + (again ? ", материал создан заново после смены сцены" : ""));
@@ -99,15 +116,80 @@ namespace NepFix
             }
         }
 
-        static RenderTexture EnsureHist(ref RenderTexture rt, int w, int h)
+        static RenderTexture EnsureHist(CamState st, ref RenderTexture rt, int w, int h)
         {
             if (rt != null && (rt.width != w || rt.height != h)) { RenderTexture.ReleaseTemporary(rt); rt = null; }
             if (rt == null)
             {
                 rt = RenderTexture.GetTemporary(new RenderTextureDescriptor(w, h, RenderTextureFormat.ARGBHalf, 0));
-                hasPrev = false;
+                st.hasPrev = false;
             }
             return rt;
+        }
+
+        static void ReleaseHist(CamState st)
+        {
+            try { if (st.histA != null) RenderTexture.ReleaseTemporary(st.histA); } catch { }
+            try { if (st.histB != null) RenderTexture.ReleaseTemporary(st.histB); } catch { }
+            st.histA = st.histB = null; st.hasPrev = false;
+        }
+
+        /// Раз в кадр из Update: освобождает историю камер, которые давно не рисовались, и всё, если NepFX выключен.
+        public static void Housekeeping()
+        {
+            if (cams.Count == 0) return;
+            float now = Time.unscaledTime;
+            bool off = !S.FxEnabled.Value;
+            System.Collections.Generic.List<IntPtr> dead = null;
+            foreach (var kv in cams)
+            {
+                var st = kv.Value;
+                if (off || now - st.usedAt > 3f) { if (st.histA != null || st.histB != null) ReleaseHist(st); }
+                if (st.cam == null || now - st.seenAt > 60f) (dead ??= new()).Add(kv.Key);
+            }
+            if (dead != null) foreach (var k in dead) { ReleaseHist(cams[k]); cams.Remove(k); }
+        }
+
+        static CamState State(Camera cam, bool overlayHint)
+        {
+            IntPtr k = cam.Pointer;
+            if (!cams.TryGetValue(k, out var st)) { st = new CamState { cam = cam }; cams[k] = st; }
+            float now = Time.unscaledTime;
+            st.seenAt = now;
+            if (now - st.checkedAt >= 1f)
+            {
+                st.checkedAt = now;
+                st.name = cam.name ?? "";
+                bool isOverlay = overlayHint;
+                try
+                {
+                    var ad = cam.GetComponent<UniversalAdditionalCameraData>();
+                    if (ad != null && ad.renderType != CameraRenderType.Base) isOverlay = true;
+                }
+                catch { }
+                if (cam.farClipPlane < 2f) isOverlay = true;
+                var tt = cam.targetTexture;
+                st.skip = true;
+                if (isOverlay) st.why = "камера-наложение " + st.name;
+                else if (cam.orthographic) st.why = "ортографическая камера " + st.name;
+                else if (cam.cameraType != CameraType.Game) st.why = "камера редактора/превью";
+                else if (tt != null && !S.FxInMenus.Value) st.why = "камера меню " + st.name;
+                else st.skip = false;
+                if (!st.logged)
+                {
+                    st.logged = true;
+                    Plugin.L.LogInfo($"NepFX: камера '{st.name}' {(st.skip ? "пропускается: " + st.why : "обрабатывается")}, far {cam.farClipPlane}, {cam.pixelWidth}x{cam.pixelHeight}, allowMSAA {cam.allowMSAA}, цель {(tt == null ? "экран" : tt.name + " aa " + tt.antiAliasing)}");
+                }
+            }
+            return st;
+        }
+
+        /// Нужен ли проход этой камере. Вызывается при постановке прохода в очередь: камерам без эффекта он не нужен,
+        /// а с ним URP готовил бы для них текстуру глубины зря.
+        public static bool Accept(Camera cam)
+        {
+            if (cam == null) return true;
+            try { return !State(cam, false).skip; } catch { return true; }
         }
 
         static void Draw(CommandBuffer cmd, RenderTargetIdentifier target, int pass)
@@ -116,37 +198,20 @@ namespace NepFix
             cmd.DrawProcedural(Matrix4x4.identity, mat, pass, MeshTopology.Triangles, 3);
         }
 
+        static int blobsFrame = -1;
+
         public static void Execute(ScriptableRenderContext context, ScriptableRenderer r, ScriptableRenderPass pass, Camera cam, bool overlay, int descW, int descH, int msaa)
         {
             if (cam == null) cam = CurrentCamera;
             if (cam == null) { Skip("нет камеры"); return; }
-            if (!overlay)
-            {
-                IntPtr k = cam.Pointer;
-                if (!camKind.TryGetValue(k, out bool isOverlay))
-                {
-                    isOverlay = false;
-                    try
-                    {
-                        var ad = cam.GetComponent<UniversalAdditionalCameraData>();
-                        if (ad != null && ad.renderType != CameraRenderType.Base) isOverlay = true;
-                    }
-                    catch { }
-                    if (cam.farClipPlane < 2f) isOverlay = true;
-                    camKind[k] = isOverlay;
-                    Plugin.L.LogInfo($"NepFX: камера '{cam.name}' {(isOverlay ? "пропускается, это наложение" : "обрабатывается")}, far {cam.farClipPlane}, {cam.pixelWidth}x{cam.pixelHeight}, MSAA по расчёту {msaa}, allowMSAA {cam.allowMSAA}, цель {(cam.targetTexture == null ? "экран" : cam.targetTexture.name + " aa " + cam.targetTexture.antiAliasing)}");
-                    if (camKind.Count > 64) camKind.Clear();
-                }
-                overlay = isOverlay;
-            }
-            if (overlay) { Skip("камера-наложение " + cam.name); return; }
-            if (cam.orthographic) { Skip("ортографическая камера " + cam.name); return; }
-            if (cam.cameraType != CameraType.Game) { Skip("камера редактора/превью"); return; }
-            if (cam.targetTexture != null && !S.FxInMenus.Value) { Skip("камера меню " + cam.name); return; }
-            ExecCount++; execWindow++;
+            var st = State(cam, overlay);
+            if (st.skip) { Skip(st.why); return; }
             float now = Time.unscaledTime;
+            st.usedAt = now;
+            ExecCount++; execWindow++;
             if (now - windowStart >= 1f) { ExecPerSec = execWindow / Math.Max(0.001f, now - windowStart); execWindow = 0; windowStart = now; }
-            LastCamera = cam.name;
+            bool menu = Plugin.MenuOpen;
+            if (menu) LastCamera = st.name;
             float scale = 1f; try { scale = Gfx.Urp()?.renderScale ?? 1f; } catch { }
             int w = (int)(cam.pixelWidth * scale), h = (int)(cam.pixelHeight * scale);
             // дескриптор точнее, если он того же формата кадра, что и камера
@@ -166,14 +231,15 @@ namespace NepFix
             // Под потолком (пещеры, шахты) окружение освещено запечённым светом, а солнце игры светит только на персонажей.
             // Контактные тени от него на неровных скалах давали тёмные угловатые пятна там, куда это солнце вообще не светит.
             if ((Lighting.Indoor || Lighting.Cave) && S.FxIndoorSunContact.Value == false) light.w = 0;
-            bool hasMotion = false; try { hasMotion = Shader.GetGlobalTexture("_MotionVectorTexture") != null; } catch { }
+            bool hasMotion = false;
+            if (S.FxUseMotion.Value) try { hasMotion = Shader.GetGlobalTexture(idMotion) != null; } catch { }
 
-            Shader.SetGlobalVector("_NepParams", new Vector4(S.FxGiRadius.Value, S.FxGiIntensity.Value, S.FxAoIntensity.Value, frame % 64));
+            Shader.SetGlobalVector(idParams, new Vector4(S.FxGiRadius.Value, S.FxGiIntensity.Value, S.FxAoIntensity.Value, frame % 64));
             float cLen = S.FxContactLength.Value;
             Indoor = light.w < 0.5f;
-            Shader.SetGlobalVector("_NepParams2", new Vector4(cLen, S.FxContactIntensity.Value, hasPrev ? S.FxTemporal.Value : 0f, S.FxDebug.Value));
-            Shader.SetGlobalVector("_NepParams3", new Vector4(S.FxRays.Value, S.FxSteps.Value, 0.6f, hasMotion && S.FxUseMotion.Value ? 1 : 0));
-            Shader.SetGlobalVector("_NepLight", light);
+            Shader.SetGlobalVector(idParams2, new Vector4(cLen, S.FxContactIntensity.Value, st.hasPrev ? S.FxTemporal.Value : 0f, S.FxDebug.Value));
+            Shader.SetGlobalVector(idParams3, new Vector4(S.FxRays.Value, S.FxSteps.Value, 0.6f, hasMotion ? 1 : 0));
+            Shader.SetGlobalVector(idLight, light);
             {
                 float fe = Math.Max(5f, S.FxFadeDistance.Value);
                 float fm = 0, fd = 0, fs = 0, fend = 0;
@@ -187,19 +253,19 @@ namespace NepFix
                     }
                 }
                 catch { }
-                Shader.SetGlobalVector("_NepFade", new Vector4(fe * 0.45f, fe, fm, fd));
-                Shader.SetGlobalVector("_NepFog2", new Vector4(fs, fend, 0, 0));
-                FogInfo = fm == 0 ? "нет" : fm == 1 ? $"линейный {fs:0}–{fend:0} м" : $"плотность {fd:0.000}";
+                Shader.SetGlobalVector(idFade, new Vector4(fe * 0.45f, fe, fm, fd));
+                Shader.SetGlobalVector(idFog2, new Vector4(fs, fend, 0, 0));
+                if (menu) FogInfo = fm == 0 ? "нет" : fm == 1 ? $"линейный {fs:0}–{fend:0} м" : $"плотность {fd:0.000}";
             }
-            Shader.SetGlobalVector("_NepSize", new Vector4(w, h, hw, hh));
+            Shader.SetGlobalVector(idSize, new Vector4(w, h, hw, hh));
+            Shader.SetGlobalMatrix(idPrevVP, st.prevVP);
 
-            Shader.SetGlobalMatrix("_NepPrevVP", prevVP);
+            var hPrev = EnsureHist(st, ref st.histA, hw, hh);
+            var hCur = EnsureHist(st, ref st.histB, hw, hh);
 
-            var hPrev = EnsureHist(ref histA, hw, hh);
-            var hCur = EnsureHist(ref histB, hw, hh);
-
-            var cmd = new CommandBuffer();
-            cmd.name = "NepFX";
+            // один буфер команд на всё время работы: раньше он создавался и удалялся каждый кадр
+            var cmd = cmdBuf ??= new CommandBuffer { name = "NepFX" };
+            cmd.Clear();
             var color = r.cameraColorTarget;
             cmd.GetTemporaryRT(idSrc, new RenderTextureDescriptor(w, h, RenderTextureFormat.ARGBHalf, 0), FilterMode.Bilinear);
             cmd.GetTemporaryRT(idTrace, new RenderTextureDescriptor(hw, hh, RenderTextureFormat.ARGBHalf, 0), FilterMode.Bilinear);
@@ -209,97 +275,98 @@ namespace NepFix
             // глубина: своя копия из буфера глубины камеры или текстура игры
             int ds = S.FxDepthSource.Value;
             bool own = ds != 1;
-            bool ms = ds == 2 || (ds == 0 && ((msaa > 1) ^ MsaaWatch.Flip(cam.name)));
+            bool ms = ds == 2 || (ds == 0 && ((msaa > 1) ^ MsaaWatch.Flip(st.name)));
             RenderTargetIdentifier depthSrc = default;
             if (own)
             {
                 try { depthSrc = r.cameraDepthTarget; } catch { own = false; }
                 if (own && depthSrc == new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget)) own = false;
             }
-            int pMs = mat.FindPass("CopyDepthMS");
             if (own && ms && pMs < 0) { LastError = "старый nepfx.bundle, запустите build_nepfx.bat"; own = false; }
             if (own)
             {
                 cmd.GetTemporaryRT(idDepth, new RenderTextureDescriptor(w, h, RenderTextureFormat.RFloat, 0), FilterMode.Point);
-                if (ms) { cmd.SetGlobalTexture("_NepDepthSrcMS", depthSrc); Draw(cmd, new RenderTargetIdentifier(idDepth), pMs); }
-                else { cmd.SetGlobalTexture("_NepDepthSrc", depthSrc); Draw(cmd, new RenderTargetIdentifier(idDepth), 6); }
-                cmd.SetGlobalTexture("_NepDepth", new RenderTargetIdentifier(idDepth));
-                DepthInfo = ms ? $"своя копия, MSAA {msaa}x" : "своя копия, без MSAA";
+                if (ms) { cmd.SetGlobalTexture(idDepthSrcMS, depthSrc); Draw(cmd, rtDepth, pMs); }
+                else { cmd.SetGlobalTexture(idDepthSrc, depthSrc); Draw(cmd, rtDepth, 6); }
+                cmd.SetGlobalTexture(idDepthTex, rtDepth);
+                if (menu) DepthInfo = ms ? $"своя копия, MSAA {msaa}x" : "своя копия, без MSAA";
             }
             else
             {
-                cmd.SetGlobalTexture("_NepDepth", new RenderTargetIdentifier("_CameraDepthTexture"));
+                cmd.SetGlobalTexture(idDepthTex, rtCamDepth);
                 DepthInfo = "текстура игры _CameraDepthTexture";
             }
 
             // цвет камеры при MSAA Unity сам сводит в обычную текстуру при чтении, поэтому хватает Blit
-            cmd.Blit(color, new RenderTargetIdentifier(idSrc));
+            cmd.Blit(color, rtSrc);
 
             // маска персонажей: их поверхность рисуется отдельно, чтобы ослабить на них затенение и шум
             bool mask = false;
-            int pMask = mat.FindPass("CharMask");
             var chars = Chars.Renderers;
             if (pMask >= 0 && chars.Count > 0 && S.FxCharStrength.Value < 0.99f)
             {
                 cmd.GetTemporaryRT(idMask, new RenderTextureDescriptor(w, h, RenderTextureFormat.RFloat, 24), FilterMode.Point);
-                cmd.SetRenderTarget(new RenderTargetIdentifier(idMask));
+                cmd.SetRenderTarget(rtMask);
                 cmd.ClearRenderTarget(true, true, Color.clear);
                 foreach (var (cr, subs) in chars)
                 {
                     if (cr == null || !cr.enabled || !cr.isVisible) continue;
                     for (int sm = 0; sm < subs; sm++) cmd.DrawRenderer(cr, mat, sm, pMask);
                 }
-                cmd.SetGlobalTexture("_NepCharMask", new RenderTargetIdentifier(idMask));
+                cmd.SetGlobalTexture(idCharMask, rtMask);
                 mask = true;
             }
-            cmd.SetGlobalTexture("_NepSource", new RenderTargetIdentifier(idSrc));
+            cmd.SetGlobalTexture(idSource, rtSrc);
 
-            cmd.SetGlobalVector("_NepParams4", new Vector4(S.FxSplit.Value ? 1 : 0, S.FxCharStrength.Value, mask ? 1 : 0, Overhead ? S.FxIndoorLength.Value : 0f));
+            cmd.SetGlobalVector(idParams4, new Vector4(S.FxSplit.Value ? 1 : 0, S.FxCharStrength.Value, mask ? 1 : 0, Overhead ? S.FxIndoorLength.Value : 0f));
             bool blobsOn = Overhead && S.FxBlobStrength.Value > 0.001f;
-            if (blobsOn) Blobs.Update(); else Blobs.Count = 0;
+            // пятна под персонажами считаются один раз за кадр, а не для каждой камеры
+            if (!blobsOn) Blobs.Count = 0;
+            else if (Time.frameCount != blobsFrame) { blobsFrame = Time.frameCount; Blobs.Update(); }
             cmd.SetGlobalVectorArray(idBlobs, Blobs.Data);
-            cmd.SetGlobalVector("_NepBlobInfo", new Vector4(Blobs.Count, S.FxBlobStrength.Value, 0, 0));
-            Draw(cmd, new RenderTargetIdentifier(idTrace), 0);                         // трассировка
-            cmd.SetGlobalTexture("_NepTrace", new RenderTargetIdentifier(idTrace));
-            cmd.SetGlobalTexture("_NepHistory", new RenderTargetIdentifier(hPrev));
+            cmd.SetGlobalVector(idBlobInfo, new Vector4(Blobs.Count, S.FxBlobStrength.Value, 0, 0));
+            Draw(cmd, rtTrace, 0);                                                     // трассировка
+            cmd.SetGlobalTexture(idTraceTex, rtTrace);
+            cmd.SetGlobalTexture(idHistory, new RenderTargetIdentifier(hPrev));
             Draw(cmd, new RenderTargetIdentifier(hCur), 1);                            // накопление
-            cmd.SetGlobalTexture("_NepBlurSrc", new RenderTargetIdentifier(hCur));
-            Draw(cmd, new RenderTargetIdentifier(idBlurA), 2);                         // размытие
-            cmd.SetGlobalTexture("_NepBlurSrc", new RenderTargetIdentifier(idBlurA));
-            Draw(cmd, new RenderTargetIdentifier(idBlurB), 3);
-            cmd.SetGlobalTexture("_NepGI", new RenderTargetIdentifier(idBlurB));
+            cmd.SetGlobalTexture(idBlurSrc, new RenderTargetIdentifier(hCur));
+            Draw(cmd, rtBlurA, 2);                                                     // размытие
+            cmd.SetGlobalTexture(idBlurSrc, rtBlurA);
+            Draw(cmd, rtBlurB, 3);
+            cmd.SetGlobalTexture(idGI, rtBlurB);
 
             // отражения по экрану
-            int pSsr = mat.FindPass("SSR");
             bool ssr = S.FxSsr.Value && pSsr >= 0;
             SsrInfo = S.FxSsr.Value && pSsr < 0 ? "нужен новый nepfx.bundle, запустите build_nepfx.bat" : "";
-            cmd.SetGlobalVector("_NepSsr", new Vector4(ssr ? 1 : 0, S.FxSsrDistance.Value, S.FxSsrMode.Value, S.FxSsrIntensity.Value));
+            cmd.SetGlobalVector(idSsr, new Vector4(ssr ? 1 : 0, S.FxSsrDistance.Value, S.FxSsrMode.Value, S.FxSsrIntensity.Value));
             if (ssr)
             {
-                // маска блестящих объектов: глубина + сила блеска
-                Prof.Run("gloss", Gloss.Update);
+                // маска блестящих объектов: глубина + сила блеска. Список готовит Gloss.Update в обычном Update.
                 cmd.GetTemporaryRT(idGloss, new RenderTextureDescriptor(w, h, RenderTextureFormat.RGFloat, 24), FilterMode.Point);
-                cmd.SetRenderTarget(new RenderTargetIdentifier(idGloss));
+                cmd.SetRenderTarget(rtGloss);
                 cmd.ClearRenderTarget(true, true, Color.clear);
                 if (pMask >= 0)
+                {
+                    float lastG = -1;
                     foreach (var (gr, sub, g) in Gloss.Items)
                     {
                         if (gr == null || !gr.isVisible) continue;
-                        cmd.SetGlobalFloat("_NepGlossVal", g);
+                        if (g != lastG) { cmd.SetGlobalFloat(idGlossVal, g); lastG = g; }
                         cmd.DrawRenderer(gr, mat, sub, pMask);
                     }
-                cmd.SetGlobalTexture("_NepGlossMask", new RenderTargetIdentifier(idGloss));
+                }
+                cmd.SetGlobalTexture(idGlossMask, rtGloss);
                 cmd.GetTemporaryRT(idSsrA, new RenderTextureDescriptor(hw, hh, RenderTextureFormat.ARGBHalf, 0), FilterMode.Bilinear);
-                Draw(cmd, new RenderTargetIdentifier(idSsrA), pSsr);
+                Draw(cmd, rtSsrA, pSsr);
                 if (S.FxSsrBlur.Value)
                 {
                     cmd.GetTemporaryRT(idSsrB, new RenderTextureDescriptor(hw, hh, RenderTextureFormat.ARGBHalf, 0), FilterMode.Bilinear);
-                    cmd.SetGlobalTexture("_NepBlurSrc", new RenderTargetIdentifier(idSsrA));
-                    Draw(cmd, new RenderTargetIdentifier(idSsrB), 2);
-                    cmd.SetGlobalTexture("_NepBlurSrc", new RenderTargetIdentifier(idSsrB));
-                    Draw(cmd, new RenderTargetIdentifier(idSsrA), 3);
+                    cmd.SetGlobalTexture(idBlurSrc, rtSsrA);
+                    Draw(cmd, rtSsrB, 2);
+                    cmd.SetGlobalTexture(idBlurSrc, rtSsrB);
+                    Draw(cmd, rtSsrA, 3);
                 }
-                cmd.SetGlobalTexture("_NepSSR", new RenderTargetIdentifier(idSsrA));
+                cmd.SetGlobalTexture(idSSRTex, rtSsrA);
             }
             Draw(cmd, color, 4);                                                       // композит
 
@@ -308,12 +375,12 @@ namespace NepFix
             if (ssr) { cmd.ReleaseTemporaryRT(idGloss); cmd.ReleaseTemporaryRT(idSsrA); if (S.FxSsrBlur.Value) cmd.ReleaseTemporaryRT(idSsrB); }
             cmd.ReleaseTemporaryRT(idSrc); cmd.ReleaseTemporaryRT(idTrace); cmd.ReleaseTemporaryRT(idBlurA); cmd.ReleaseTemporaryRT(idBlurB);
             context.ExecuteCommandBuffer(cmd);
-            cmd.Release();
+            cmd.Clear();
 
             // история: текущий кадр станет «прошлым»
-            var t = histA; histA = histB; histB = t;
-            prevVP = GL.GetGPUProjectionMatrix(cam.projectionMatrix, true) * cam.worldToCameraMatrix;
-            hasPrev = true;
+            var t = st.histA; st.histA = st.histB; st.histB = t;
+            st.prevVP = GL.GetGPUProjectionMatrix(cam.projectionMatrix, true) * cam.worldToCameraMatrix;
+            st.hasPrev = true;
         }
     }
 }

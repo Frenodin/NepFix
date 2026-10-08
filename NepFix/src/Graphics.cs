@@ -20,8 +20,9 @@ namespace NepFix
         static readonly Dictionary<IntPtr, float> gameFar = new();
         static readonly Dictionary<IntPtr, float> ourFar = new();
         static readonly HashSet<IntPtr> featuresLogged = new();
-        static float gameFixedDt = -1f;
-        static bool fixedDtTouched;
+        static readonly Dictionary<IntPtr, string> featName = new();
+        static float qsShadowSet = -1, qsShadowT = -100;
+        static readonly Dictionary<IntPtr, UnityEngine.Object> camObjs = new();
         public static int TargetFps { get; private set; } = 60;
         static int lastTarget = -1;
         public static int Refresh { get; private set; } = 60;
@@ -82,14 +83,21 @@ namespace NepFix
             }
         }
 
+        static UniversalRenderPipelineAsset urp; static int urpFrame = -100;
+        /// Ассет URP. Запрашивается у Unity не чаще раза в 30 кадров: каждый запрос создаёт объекты-обёртки.
         public static UniversalRenderPipelineAsset Urp()
         {
+            int f = Time.frameCount;
+            if (urp != null && f - urpFrame < 30) return urp;
+            urpFrame = f;
             try
             {
                 var rp = GraphicsSettings.currentRenderPipeline;
-                return rp == null ? null : rp.TryCast<UniversalRenderPipelineAsset>();
+                if (rp == null) { urp = null; return null; }
+                if (urp == null || urp.Pointer != rp.Pointer) urp = rp.TryCast<UniversalRenderPipelineAsset>();
+                return urp;
             }
-            catch { return null; }
+            catch { urp = null; return null; }
         }
 
         /// Лёгкие проверки — каждые ~0.5 с.
@@ -152,9 +160,11 @@ namespace NepFix
                 ICalls.SetMaxQueuedFrames(S.MaxQueuedFrames.Value);
         }
 
+        static float refreshT = -100;
         static void ApplyFps()
         {
-            Refresh = Win32.RefreshRate();
+            float nowT = Time.unscaledTime;
+            if (nowT - refreshT > 5f) { refreshT = nowT; Refresh = Win32.RefreshRate(); }
             int target = S.FpsLimit.Value > 0 ? S.FpsLimit.Value : Refresh;
             if (S.VSync.Value) target = Math.Min(target, Refresh);
             target = Math.Clamp(target, 30, 500);
@@ -162,7 +172,8 @@ namespace NepFix
 
             if (S.FpsUnlock.Value)
             {
-                QualitySettings.vSyncCount = S.VSync.Value ? 1 : 0;
+                int vs = S.VSync.Value ? 1 : 0;
+                if (ICalls.VSyncCount() != vs) QualitySettings.vSyncCount = vs;
                 if (Application.targetFrameRate != target || target != lastTarget)
                 {
                     // Сеттер игры также пересчитывает её внутренний шаг времени (GameTime).
@@ -173,18 +184,30 @@ namespace NepFix
                 }
             }
 
-            if (S.SyncPhysicsToFps.Value)
+            ApplyFixedDt();
+        }
+
+        // ---- шаг физики: один владелец ----
+        // Раньше его меняли и «Шаг физики под FPS», и мотоцикл, каждый со своей копией исходного значения.
+        // При переключении во время езды одна из копий оказывалась уже изменённой, и шаг физики оставался чужим.
+        static float fdtOrig = -1, fdtSet = -1;
+        /// Желаемый мотоциклом шаг физики, 0 если не едем.
+        public static float BikeFdt;
+        public static void ApplyFixedDt()
+        {
+            float cur = Time.fixedDeltaTime;
+            bool ours = fdtSet > 0 && Math.Abs(cur - fdtSet) < 1e-6f;
+            if (!ours) { fdtOrig = cur; fdtSet = -1; } // значение игры (или игра поменяла его сама)
+            float want = -1;
+            // выше 90 Гц физика на больших картах съедает процессор и сама даёт фризы
+            if (S.SyncPhysicsToFps.Value) want = 1f / Math.Clamp(TargetFps, 50, 90);
+            else if (BikeFdt > 0) want = Math.Min(fdtOrig, BikeFdt);
+            if (want > 0 && Math.Abs(want - fdtOrig) > 1e-6f)
             {
-                if (!fixedDtTouched) { gameFixedDt = Time.fixedDeltaTime; fixedDtTouched = true; }
-                // выше 90 Гц физика на больших картах съедает процессор и сама даёт фризы
-                float want = 1f / Math.Clamp(target, 50, 90);
-                if (Math.Abs(Time.fixedDeltaTime - want) > 1e-5f) Time.fixedDeltaTime = want;
+                if (Math.Abs(cur - want) > 1e-6f) Time.fixedDeltaTime = want;
+                fdtSet = want;
             }
-            else if (fixedDtTouched)
-            {
-                Time.fixedDeltaTime = gameFixedDt > 0 ? gameFixedDt : 0.02f;
-                fixedDtTouched = false;
-            }
+            else if (ours) { Time.fixedDeltaTime = fdtOrig; fdtSet = -1; }
         }
 
         static void ApplyUrp()
@@ -220,7 +243,7 @@ namespace NepFix
                 want = Math.Min(want, 400f);
                 if (Math.Abs(cur - want) > 0.01f) a.shadowDistance = want;
                 ourShadowDist[key] = want;
-                QualitySettings.shadowDistance = want;
+                if (Math.Abs(qsShadowSet - want) > 0.01f || Time.unscaledTime - qsShadowT > 10f) { QualitySettings.shadowDistance = want; qsShadowSet = want; qsShadowT = Time.unscaledTime; }
             }
 
             ApplyFeatures(a);
@@ -241,7 +264,7 @@ namespace NepFix
                 {
                     var f = feats[j];
                     if (f == null) continue;
-                    string tn = f.GetIl2CppType().Name;
+                    if (!featName.TryGetValue(f.Pointer, out string tn)) { tn = f.GetIl2CppType().Name; featName[f.Pointer] = tn; }
                     if (log) Plugin.L.LogInfo($"  Renderer '{rd.name}': feature '{f.name}' ({tn}) active={f.isActive}");
                     if (tn.Contains("AmbientOcclusion") && f.isActive != S.Ssao.Value) f.SetActive(S.Ssao.Value);
                 }
@@ -259,23 +282,26 @@ namespace NepFix
             {
                 var cam = camBuf[i];
                 if (cam == null) continue;
-                cam.allowMSAA = S.Msaa.Value > 1 && !ReShadeActive;
+                bool am = S.Msaa.Value > 1 && !ReShadeActive;
+                if (cam.allowMSAA != am) cam.allowMSAA = am;
                 var data = cam.GetComponent<UniversalAdditionalCameraData>();
                 if (data != null && data.renderType == CameraRenderType.Base)
                 {
                     var pa = S.PostAa.Value;
-                    data.antialiasing = pa switch
+                    var am2 = pa switch
                     {
                         PostAA.FXAA => AntialiasingMode.FastApproximateAntialiasing,
                         PostAA.Off => AntialiasingMode.None,
                         _ => AntialiasingMode.SubpixelMorphologicalAntiAliasing
                     };
-                    data.antialiasingQuality = pa switch
+                    var aq = pa switch
                     {
                         PostAA.SMAA_Low => AntialiasingQuality.Low,
                         PostAA.SMAA_Medium => AntialiasingQuality.Medium,
                         _ => AntialiasingQuality.High
                     };
+                    if (data.antialiasing != am2) data.antialiasing = am2;
+                    if (data.antialiasingQuality != aq) data.antialiasingQuality = aq;
                 }
                 if (!cam.orthographic)
                 {
@@ -284,29 +310,32 @@ namespace NepFix
                     if (!ourFar.TryGetValue(k, out float ours) || Math.Abs(cur - ours) > 0.01f) gameFar[k] = cur;
                     float want = gameFar[k] * Math.Clamp(S.FarClipMul.Value, 1f, 5f);
                     if (Math.Abs(cur - want) > 0.01f) cam.farClipPlane = want;
-                    ourFar[k] = want;
+                    ourFar[k] = want; camObjs[k] = cam;
                 }
             }
-            if (gameFar.Count > 256) { gameFar.Clear(); ourFar.Clear(); }
+            Scan.PruneDestroyed(camObjs, gameFar, ourFar);
         }
 
         /// Интерполяция только для предметов, которые двигает физика. Героинь и врагов двигает сама игра:
         /// в бою и в суперприёмах она переносит их в нужную точку сцены, а интерполяция тянула тело назад,
         /// и модель оказывалась сбоку или сверху кадра. Таких не трогаем.
-        static readonly Dictionary<IntPtr, bool> rbChecked = new();
+        static readonly Dictionary<IntPtr, bool> rbChecked = new(); static int rbScene = int.MinValue;
         public static int RbInterpolated, RbSkipped;
         static void ApplyRigidbodies()
         {
-            var arr = UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<Rigidbody>());
+            var arr = Scan.All<Rigidbody>();
             if (arr == null) return;
-            if (rbChecked.Count > 4000) rbChecked.Clear();
+            int sc = Scan.Scene;
+            if (sc != rbScene || rbChecked.Count > 8000) { rbScene = sc; rbChecked.Clear(); }
             int on = 0, skip = 0;
-            foreach (var o in arr)
+            for (int i = 0; i < arr.Length; i++)
             {
-                var rb = o.TryCast<Rigidbody>();
-                if (rb == null) continue;
-                if (!rbChecked.TryGetValue(rb.Pointer, out bool ok))
+                IntPtr p = Scan.Raw(arr, i);
+                if (p == IntPtr.Zero) continue;
+                if (!rbChecked.TryGetValue(p, out bool ok))
                 {
+                    var rb = arr[i]?.TryCast<Rigidbody>();
+                    if (rb == null) continue;
                     ok = true;
                     try
                     {
@@ -315,7 +344,7 @@ namespace NepFix
                         else if (rb.GetComponentInParent(Il2CppType.Of<CharacterController>(), true) != null) ok = false;
                     }
                     catch { ok = false; }
-                    rbChecked[rb.Pointer] = ok;
+                    rbChecked[p] = ok;
                     if (ok) rb.interpolation = RigidbodyInterpolation.Interpolate;
                 }
                 if (ok) on++; else skip++;
@@ -325,12 +354,12 @@ namespace NepFix
 
         static void ApplyAnimators()
         {
-            var arr = UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<Animator>());
+            var arr = Scan.All<Animator>();
             if (arr == null) return;
             foreach (var o in arr)
             {
                 var an = o.TryCast<Animator>();
-                if (an != null) an.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                if (an != null && an.cullingMode != AnimatorCullingMode.AlwaysAnimate) an.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             }
         }
 

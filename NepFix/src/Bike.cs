@@ -15,22 +15,19 @@ namespace NepFix
         static float next;
         public static string Info = "";
         public static bool Riding;
-        static float gameFdt = -1;
 
         /// На высокой скорости мотоцикл за один шаг физики проезжает больше полуметра и проскакивает сквозь тонкие
         /// стены и заборы. Пока едем, учащаем шаги физики ровно настолько, чтобы за шаг было не больше 0,4 м.
+        /// Сам шаг выставляет Gfx.ApplyFixedDt: у него единственная копия исходного значения игры.
         static void PhysicsStep(MapMoveBikePad bp, MapManagerDataMoveUnitBikePad d)
         {
-            if (S.SyncPhysicsToFps.Value) { gameFdt = -1; return; }
-            if (bp == null || d == null)
+            float want = 0;
+            if (bp != null && d != null)
             {
-                if (gameFdt > 0) { Time.fixedDeltaTime = gameFdt; gameFdt = -1; }
-                return;
+                float vmax = Math.Max(Math.Abs(bp.speed_), d.speed_maximum_ * 1.3f);
+                want = Math.Max(0.4f / Math.Max(vmax, 1f), 1f / 120f);
             }
-            if (gameFdt < 0) gameFdt = Time.fixedDeltaTime;
-            float vmax = Math.Max(Math.Abs(bp.speed_), d.speed_maximum_ * 1.3f);
-            float want = Math.Clamp(0.4f / Math.Max(vmax, 1f), 1f / 120f, gameFdt);
-            if (Math.Abs(Time.fixedDeltaTime - want) > 1e-5f) Time.fixedDeltaTime = want;
+            if (Math.Abs(want - Gfx.BikeFdt) > 1e-6f) { Gfx.BikeFdt = want; Gfx.ApplyFixedDt(); }
         }
 
         public static void Update()
@@ -41,10 +38,8 @@ namespace NepFix
             try
             {
                 MapMoveBikePad bp = null;
-                var arr = UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<MapUnitBaseComponent>());
-                if (arr != null) foreach (var o in arr)
+                foreach (var u in Scan.MapUnits())
                 {
-                    var u = o.TryCast<MapUnitBaseComponent>(); if (u == null) continue;
                     try { var b = u.map_move_bike_pad_; if (b != null) { bp = b; break; } } catch { }
                 }
                 Riding = bp != null;
@@ -65,7 +60,7 @@ namespace NepFix
                 Set(v => d.wall_decelerate_ = v, d.wall_decelerate_, oWallDec * (1f - 0.8f * wall));
                 Set(v => d.speed_wall_ = v, d.speed_wall_, Math.Max(oSpeedWall, oSpeedWall + (oSpeedMax * sp - oSpeedWall) * 0.6f * wall));
                 PhysicsStep(bp, d);
-                Info = $"Шаг физики {1f / Time.fixedDeltaTime:0} в секунду. Сейчас поворот {d.handling_:0}°/с, в игре {oHandling:0}. Скорость до {d.speed_maximum_:0.#}, в игре {oSpeedMax:0.#}. Торможение о стену {d.wall_decelerate_:0}, в игре {oWallDec:0}.";
+                if (Plugin.MenuOpen) Info = $"Шаг физики {1f / Time.fixedDeltaTime:0} в секунду. Сейчас поворот {d.handling_:0}°/с, в игре {oHandling:0}. Скорость до {d.speed_maximum_:0.#}, в игре {oSpeedMax:0.#}. Торможение о стену {d.wall_decelerate_:0}, в игре {oWallDec:0}.";
             }
             catch (Exception e) { Info = "Мотоцикл: " + e.Message; }
         }

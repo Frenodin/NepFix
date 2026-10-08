@@ -13,8 +13,7 @@ namespace NepFix
         static readonly HashSet<IntPtr> texDone = new();
         static float appliedBias = float.NaN;
         public static int TexturesSharpened;
-        static bool loadTuned;
-        static float lastTex = -100;
+        static bool loadTuned, reuseSet;
 
         public static void ApplyGlobal()
         {
@@ -35,47 +34,74 @@ namespace NepFix
                 ICalls.Get<ICalls.SetBool>("UnityEngine.Physics::set_autoSyncTransforms")?.Invoke(wantSync);
                 lastSync = wantSync;
             }
-            if (S.PhysicsNoAutoSync.Value) ICalls.Get<ICalls.SetBool>("UnityEngine.Physics::set_reuseCollisionCallbacks")?.Invoke(true);
+            if (S.PhysicsNoAutoSync.Value && !reuseSet) { ICalls.Get<ICalls.SetBool>("UnityEngine.Physics::set_reuseCollisionCallbacks")?.Invoke(true); reuseSet = true; }
         }
 
-        /// Раз в несколько секунд: скиннинг вне кадра, аниматоры, резкость текстур.
+        /// Раз в несколько секунд: скиннинг вне кадра, аниматоры. Записывается только то, что отличается.
         public static void ApplyObjects()
         {
             if (S.SkinOffscreenOff.Value)
             {
-                var arr = UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<SkinnedMeshRenderer>());
-                if (arr != null) foreach (var o in arr) { var r = o.TryCast<SkinnedMeshRenderer>(); if (r != null) r.updateWhenOffscreen = false; }
+                var arr = Scan.All<SkinnedMeshRenderer>();
+                if (arr != null) foreach (var o in arr) { var r = o.TryCast<SkinnedMeshRenderer>(); if (r != null && r.updateWhenOffscreen) r.updateWhenOffscreen = false; }
             }
             if (S.AnimatorCulling.Value && !S.AnimatorAlwaysAnimate.Value)
             {
-                var arr = UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<Animator>());
-                if (arr != null) foreach (var o in arr) { var a = o.TryCast<Animator>(); if (a != null) a.cullingMode = AnimatorCullingMode.CullUpdateTransforms; }
+                var arr = Scan.All<Animator>();
+                if (arr != null) foreach (var o in arr) { var a = o.TryCast<Animator>(); if (a != null && a.cullingMode != AnimatorCullingMode.CullUpdateTransforms) a.cullingMode = AnimatorCullingMode.CullUpdateTransforms; }
             }
-            if (UnityEngine.Time.realtimeSinceStartup - lastTex > 15f || S.TextureSharpness.Value != appliedBias) { lastTex = UnityEngine.Time.realtimeSinceStartup; ApplyMipBias(); }
         }
 
-        static void ApplyMipBias()
+        // ---- резкость текстур: обход всех загруженных текстур частями по бюджету времени ----
+        // Раньше полный список текстур запрашивался каждые 15 секунд и обрабатывался в одном кадре.
+        // Теперь только после смены сцены (текстуры локации догружаются) и при изменении настройки.
+        static Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppReferenceArray<UnityEngine.Object> texArr; static int texIdx;
+        static readonly List<float> texDue = new();
+        static int texScene = int.MinValue; static bool resetPending; static float texPeriodic;
+
+        /// Каждый кадр из Update мода.
+        public static void Tick()
         {
+            float now = Time.unscaledTime;
             float bias = S.TextureSharpness.Value;
-            if (bias != appliedBias) { texDone.Clear(); appliedBias = bias; TexturesSharpened = 0; }
-            var arr = Resources.FindObjectsOfTypeAll(Il2CppType.Of<Texture2D>());
-            if (arr == null) return;
-            int budget = 3000;
-            foreach (var o in arr)
+            int sc = Scan.Scene;
+            if (sc != texScene) { texScene = sc; texDue.Clear(); texDue.Add(now + 3f); texDue.Add(now + 15f); }
+            if (bias != appliedBias)
             {
-                if (budget-- <= 0) break;
-                IntPtr k = o.Pointer;
-                if (texDone.Contains(k)) continue;
-                texDone.Add(k);
-                var t = o.TryCast<Texture2D>();
-                if (t == null || t.mipmapCount <= 1) continue;
-                if (t.width < 256) continue; // иконки/UI/мелочь не трогаем
-                string n = t.name ?? "";
-                // окружение/объекты/персонажи: имена карт вида m12_*, chara, obj; UI-атласы без мипов уже отсеяны
-                t.mipMapBias = bias;
-                TexturesSharpened++;
+                // при выключении (0) нужно вернуть 0 только если раньше что-то меняли
+                bool touched = !float.IsNaN(appliedBias) && appliedBias != 0f;
+                texDone.Clear(); TexturesSharpened = 0; appliedBias = bias; texArr = null;
+                resetPending = bias == 0f && touched;
+                texDue.Clear(); texDue.Add(now);
             }
-            if (texDone.Count > 60000) texDone.Clear();
+            if (bias == 0f && !resetPending) { texDue.Clear(); texArr = null; return; }
+            if (texArr == null)
+            {
+                if (texDue.Count == 0 && now >= texPeriodic) { texPeriodic = now + 60f; texDue.Add(now); } // новые модели и текстуры меню
+                if (texDue.Count == 0 || now < texDue[0]) return;
+                texDue.RemoveAt(0);
+                try { texArr = Resources.FindObjectsOfTypeAll(Il2CppType.Of<Texture2D>()); } catch { texArr = null; }
+                texIdx = 0;
+                if (texArr == null) return;
+            }
+            long end = Scan.Now + Scan.Ms(0.7);
+            int n = texArr.Length;
+            for (int c = 0; texIdx < n; texIdx++, c++)
+            {
+                if ((c & 31) == 31 && Scan.Now > end) break;
+                try
+                {
+                    IntPtr k = Scan.Raw(texArr, texIdx);
+                    if (k == IntPtr.Zero || !texDone.Add(k)) continue;
+                    var t = texArr[texIdx]?.TryCast<Texture2D>();
+                    if (t == null || t.mipmapCount <= 1) continue;
+                    if (t.width < 256) continue; // иконки, интерфейс и мелочь не трогаем
+                    t.mipMapBias = bias;
+                    TexturesSharpened++;
+                }
+                catch { }
+            }
+            if (texIdx >= n) { texArr = null; if (bias == 0f) resetPending = false; if (texDone.Count > 100000) texDone.Clear(); }
         }
 
         public static void Preset(int p)

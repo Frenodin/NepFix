@@ -13,10 +13,13 @@ namespace NepFix
     internal static class Lighting
     {
         static Settings S => Plugin.S;
-        static readonly Dictionary<IntPtr, LightShadows> origShadows = new();
+        /// Исходный режим теней источника и то, что выставил мод. Если игра сама поменяла режим, новое значение становится исходным:
+        /// раньше мод возвращал записанное в первый раз и отменял решения игры.
+        static readonly Dictionary<IntPtr, (LightShadows orig, LightShadows set)> shadowState = new();
+        static readonly Dictionary<IntPtr, UnityEngine.Object> lightObjs = new();
         static float gameRefl = -1, ourRefl = -1;
         static SphericalHarmonicsL2 baseProbe; static bool haveProbe;
-        static string probeKey = ""; static float appliedMul = -1, appliedAdd = -1;
+        static (int, AmbientMode, float, Color, Color) probeKey; static float appliedMul = -1, appliedAdd = -1;
         static bool Sane(SphericalHarmonicsL2 p)
         {
             for (int c = 0; c < 3; c++) for (int k = 0; k < 9; k++) { float v = p[c, k]; if (float.IsNaN(v) || Math.Abs(v) > 20f) return false; }
@@ -41,23 +44,27 @@ namespace NepFix
         {
             var cam = Camera.main;
             Vector3 cp = cam != null ? cam.transform.position : Vector3.zero;
-            var arr = UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<Light>());
+            var arr = Scan.All<Light>();
             var lights = new List<Light>();
             if (arr != null) foreach (var o in arr) { var l = o.TryCast<Light>(); if (l != null && l.enabled && l.gameObject.activeInHierarchy) lights.Add(l); }
 
             int dir = 0, dirSh = 0, loc = 0, locSh = 0;
             var local = new List<(Light l, float d)>();
+            var origShadows = new Dictionary<IntPtr, LightShadows>();
             foreach (var l in lights)
             {
                 IntPtr k = l.Pointer;
-                if (!origShadows.ContainsKey(k)) origShadows[k] = l.shadows;
+                var cur = l.shadows;
+                LightShadows orig = shadowState.TryGetValue(k, out var stt) && cur == stt.set ? stt.orig : cur;
+                origShadows[k] = orig; lightObjs[k] = l;
                 if (l.type == LightType.Directional)
                 {
                     dir++;
                     // направленный свет не трогаем: у второго солнца игра тени выключила специально,
                     // на аниме-шейдере персонажей его тени дают пятна на лицах
-                    if (l.shadows != origShadows[k]) l.shadows = origShadows[k];
-                    if (l.shadows != LightShadows.None) dirSh++;
+                    if (cur != orig) l.shadows = orig;
+                    shadowState[k] = (orig, orig);
+                    if (orig != LightShadows.None) dirSh++;
                 }
                 else if (l.type == LightType.Point || l.type == LightType.Spot)
                 {
@@ -75,7 +82,8 @@ namespace NepFix
                 IntPtr k = l.Pointer;
                 var want = nearest.Contains(k) ? (origShadows[k] == LightShadows.None ? LightShadows.Soft : origShadows[k]) : origShadows[k];
                 if (l.shadows != want) l.shadows = want;
-                if (l.shadows != LightShadows.None) locSh++;
+                shadowState[k] = (origShadows[k], want);
+                if (want != LightShadows.None) locSh++;
             }
 
 
@@ -85,10 +93,10 @@ namespace NepFix
                 lastLightCount = lights.Count;
                 var sb = new StringBuilder("Освещение сцены: " + Summary + "\n");
                 foreach (var l in lights.Take(40))
-                    sb.AppendLine($"  {l.type} '{l.name}' I={l.intensity:0.00} range={l.range:0.0} shadows={l.shadows} (исх. {origShadows[l.Pointer]}) mode={l.renderMode} color={l.color}");
+                    sb.AppendLine($"  {l.type} '{l.name}' I={l.intensity:0.00} range={l.range:0.0} shadows={l.shadows} (исх. {(origShadows.TryGetValue(l.Pointer, out var os) ? os : l.shadows)}) mode={l.renderMode} color={l.color}");
                 Plugin.L.LogInfo(sb.ToString());
             }
-            if (origShadows.Count > 2000) origShadows.Clear();
+            Scan.PruneDestroyed(lightObjs, shadowState);
         }
 
 
@@ -114,7 +122,7 @@ namespace NepFix
             // и множитель накапливается. Базу берём только при смене сцены или настроек неба самой игрой.
             try
             {
-                var key = $"{UnityEngine.SceneManagement.SceneManager.GetActiveScene().handle}|{RenderSettings.ambientMode}|{RenderSettings.ambientIntensity:0.###}|{RenderSettings.ambientSkyColor}|{RenderSettings.ambientLight}";
+                var key = (Scan.Scene, RenderSettings.ambientMode, (float)Math.Round(RenderSettings.ambientIntensity, 3), RenderSettings.ambientSkyColor, RenderSettings.ambientLight);
                 bool neutral = Math.Abs(mul - 1f) < 1e-3f && add < 1e-3f;
                 if (key != probeKey || !haveProbe)
                 {
@@ -174,8 +182,7 @@ namespace NepFix
                 {
                     var c = lead.bounds.center + Vector3.up * 1.5f;
                     int hits = 0;
-                    Vector3[] off = { Vector3.zero, new Vector3(2, 0, 0), new Vector3(-2, 0, 0), new Vector3(0, 0, 2), new Vector3(0, 0, -2) };
-                    foreach (var o in off) if (Physics.Raycast(c + o, Vector3.up, 150f)) hits++;
+                    foreach (var o in rayOff) if (Physics.Raycast(c + o, Vector3.up, 150f)) hits++;
                     // сглаживание, чтобы не мигало под кронами деревьев
                     indoorVotes = Math.Clamp(indoorVotes + (hits >= 4 ? 1 : -1), -3, 3);
                     if (indoorVotes >= 2) Indoor = true; else if (indoorVotes <= -2) Indoor = false;
@@ -184,13 +191,14 @@ namespace NepFix
             catch { }
             try
             {
-                int sc = UnityEngine.SceneManagement.SceneManager.GetActiveScene().handle;
+                int sc = Scan.Scene;
                 if (sc != caveScene) { caveScene = sc; caveSticky = false; }
                 int lm = 0; try { lm = LightmapSettings.lightmaps.Length; } catch { }
                 float amb = haveProbe ? (baseProbe[0, 0] + baseProbe[1, 0] + baseProbe[2, 0]) / 3f : 1f;
                 bool dark = lm > 0 && amb < 0.1f;
                 if (Indoor || dark) caveSticky = true;
                 Cave = caveSticky;
+                if (!S.VerboseLog.Value && !Plugin.MenuOpen) return;
                 string info = $"пещера {Cave} (потолок {Indoor}, карт освещения {lm}, рассеянный свет {amb:0.000}, солнц с тенями {SunShadows})";
                 if (info != lastCaveInfo) { lastCaveInfo = info; if (S.VerboseLog.Value) Plugin.L.LogInfo("Свет: " + info); }
             }
@@ -210,7 +218,7 @@ namespace NepFix
                 int lm = 0, lpc = 0, rp = 0;
                 try { lm = LightmapSettings.lightmaps.Length; } catch { }
                 try { var lp = LightmapSettings.lightProbes; lpc = lp == null ? 0 : lp.count; } catch { }
-                try { var a = UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<ReflectionProbe>()); rp = a == null ? 0 : a.Length; } catch { }
+                try { var a = Scan.All<ReflectionProbe>(); rp = a == null ? 0 : a.Length; } catch { }
                 var b = baseProbe;
                 float amb = (b[0, 0] + b[1, 0] + b[2, 0]) / 3f;
                 string s = $"Сцена: окружающий свет {ModeName(RenderSettings.ambientMode)}, яркость по игре {amb:0.00}, карт освещения {lm}, световых проб {lpc}, проб отражений {rp}.";
@@ -244,10 +252,11 @@ namespace NepFix
                     if (Math.Abs(st.Intensity - wi) > 1e-4f) st.Intensity = wi;
                     if (Math.Abs(st.Radius - wr) > 1e-4f) st.Radius = wr;
                     if (S.SsaoHighQuality.Value) { if (st.Downsample) st.Downsample = false; if (st.SampleCount < 8) st.SampleCount = 8; }
-                    SsaoInfo = $"SSAO: сила {o.i:0.00}→{st.Intensity:0.00}, радиус {o.r:0.00}→{st.Radius:0.00}, выборок {st.SampleCount}, пониж. разрешение {(st.Downsample ? "да" : "нет")}";
+                    if (Plugin.MenuOpen) SsaoInfo = $"SSAO: сила {o.i:0.00}→{st.Intensity:0.00}, радиус {o.r:0.00}→{st.Radius:0.00}, выборок {st.SampleCount}, пониж. разрешение {(st.Downsample ? "да" : "нет")}";
                 }
             }
         }
         public static string SsaoInfo = "";
+        static readonly Vector3[] rayOff = { Vector3.zero, new Vector3(2, 0, 0), new Vector3(-2, 0, 0), new Vector3(0, 0, 2), new Vector3(0, 0, -2) };
     }
 }

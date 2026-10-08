@@ -43,8 +43,10 @@ namespace NepFix
                         }
                     }
                     catch (Exception e) { NepFX.LastError = "cameraData: " + e.Message; }
-                    try { Prof.Run("nepfx", () => NepFX.Execute(context, r, this, cam, overlay, dw, dh, msaa)); }
+                    long t0 = Prof.Begin();
+                    try { NepFX.Execute(context, r, this, cam, overlay, dw, dh, msaa); }
                     catch (Exception e) { NepFX.LastError = e.GetType().Name + ": " + e.Message; if (!errFx) { errFx = true; Plugin.L.LogWarning("NepFX.Execute: " + e); } }
+                    finally { Prof.End("nepfx", t0); }
                     return;
                 }
                 if (!Plugin.S.PipelineTest.Value) return;
@@ -74,7 +76,10 @@ namespace NepFix
 
         static void Postfix(ScriptableRenderer __instance)
         {
-            if (failed || !(Plugin.S.PipelineTest.Value || (Plugin.S.FxEnabled.Value && NepFX.Ready))) return;
+            bool test = Plugin.S.PipelineTest.Value;
+            if (failed || !(test || (Plugin.S.FxEnabled.Value && NepFX.Ready))) return;
+            // камерам без эффекта (интерфейс, наложения, меню) проход не нужен: с ним URP готовил бы им буфер глубины впустую
+            if (!test && !NepFX.Accept(NepFX.CurrentCamera)) return;
             try
             {
                 if (pass == null)

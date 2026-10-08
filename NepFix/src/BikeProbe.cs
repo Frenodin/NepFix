@@ -18,7 +18,7 @@ namespace NepFix
         static float nextScan;
         public static int FixedSteps;
         static readonly StringBuilder sb = new();
-        static int rows, files; static bool headerDone, dataDumped;
+        static int rows; static bool headerDone, dataDumped;
         static Vector3 lastRoot, lastModel; static float lastYaw, lastModelYaw; static bool hasLast;
         public static int Crashes, WallHits;
         public static string Info = "";
@@ -27,6 +27,8 @@ namespace NepFix
         public static void FixedTick() { FixedSteps++; }
 
         static bool wasOn;
+        /// Замер только что выключили: нужно дописать файл.
+        public static bool Pending => wasOn || sb.Length > 0;
         public static void LateUpdate()
         {
             bool on = Plugin.S.BikeProbe.Value;
@@ -74,10 +76,8 @@ namespace NepFix
             try
             {
                 MapUnitBaseComponent best = null; MapMoveBikePad bp = null; int count = 0;
-                var arr = UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<MapUnitBaseComponent>());
-                if (arr != null) foreach (var o in arr)
+                foreach (var u in Scan.MapUnits())
                 {
-                    var u = o.TryCast<MapUnitBaseComponent>(); if (u == null) continue;
                     MapMoveBikePad b = null; try { b = u.map_move_bike_pad_; } catch { }
                     if (b == null) continue;
                     count++;

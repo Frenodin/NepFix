@@ -7,7 +7,8 @@ namespace NepFix
     /// Точки на полу под персонажами для мягкой тени в помещениях.
     internal static class Blobs
     {
-        public static readonly Vector4[] Data = new Vector4[8];
+        /// Массив сразу в памяти игры: передаётся в шейдер каждый кадр без копирования.
+        public static readonly Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppStructArray<Vector4> Data = new(8);
         public static int Count;
         public static string Error = "";
         static readonly List<Bounds> clusters = new();

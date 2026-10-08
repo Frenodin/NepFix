@@ -13,12 +13,14 @@ namespace NepFix
         public static void Apply()
         {
             bool want = Plugin.S.FootIK.Value;
+            // игра сама включает IK по ситуации, поэтому вмешиваемся только в режиме «выкл» и один раз при включении обратно.
+            // В остальное время сцену не обходим, разве что для счётчика в открытом меню.
+            if (want && applied != false && !Plugin.MenuOpen) return;
             try
             {
-                var arr = UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<CharaIK.FootIK>());
+                var arr = Scan.All<CharaIK.FootIK>();
                 Count = arr == null ? 0 : arr.Length;
                 if (arr == null) return;
-                // игра сама включает IK по ситуации, поэтому вмешиваемся только в режиме «выкл»
                 if (want && applied != false) return;
                 foreach (var o in arr)
                 {

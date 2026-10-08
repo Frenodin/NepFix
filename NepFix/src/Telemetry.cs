@@ -37,34 +37,47 @@ namespace NepFix
             bool nv = Nvml.Init();
             Source = nv ? "NVML" : "PDH";
             Pdh.Init();
-            var proc = Process.GetCurrentProcess();
+            var proc = Process.GetCurrentProcess(); int pid = proc.Id;
             TimeSpan lastProc = proc.TotalProcessorTime; long lastIdle = 0, lastKernel = 0, lastUser = 0; GetTimes(ref lastIdle, ref lastKernel, ref lastUser);
             var sw = Stopwatch.StartNew(); double lastT = 0;
+            int tick = 0; bool wasIdle = false, prevDetail = false;
             while (run)
             {
                 Thread.Sleep(500);
                 try
                 {
+                    // Без оверлея и меню данные никто не видит, а счётчики GPU Windows (PDH) опрашивают драйвер по всем процессам
+                    // и сами могут давать подёргивания. Поэтому в это время ничего не замеряем.
+                    int mode = 0; try { mode = Plugin.S.HudMode.Value; } catch { }
+                    bool menu = Plugin.MenuOpen;
+                    if (mode == 0 && !menu) { wasIdle = true; continue; }
+                    bool detail = mode >= 2 || menu;
+                    tick++;
                     // CPU
                     double now = sw.Elapsed.TotalSeconds, dt = now - lastT; lastT = now;
                     long idle = 0, kernel = 0, user = 0; GetTimes(ref idle, ref kernel, ref user);
                     long di = idle - lastIdle, dk = kernel - lastKernel, du = user - lastUser;
-                    if (dk + du > 0) CpuLoad = (float)(100.0 * (dk + du - di) / (dk + du));
+                    if (!wasIdle && dk + du > 0) CpuLoad = (float)(100.0 * (dk + du - di) / (dk + du));
                     lastIdle = idle; lastKernel = kernel; lastUser = user;
-                    proc.Refresh();
-                    var pt = proc.TotalProcessorTime;
-                    if (dt > 0) CpuGame = (float)(100.0 * (pt - lastProc).TotalSeconds / (dt * Environment.ProcessorCount));
-                    lastProc = pt;
-                    GameThreads = proc.Threads.Count;
-                    RamGameMB = proc.WorkingSet64 / 1048576.0;
-                    RamGamePrivateMB = proc.PrivateMemorySize64 / 1048576.0;
-                    ManagedMB = GC.GetTotalMemory(false) / 1048576.0;
-                    var ms = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
-                    if (GlobalMemoryStatusEx(ref ms)) { RamTotalMB = ms.ullTotalPhys / 1048576.0; RamUsedMB = (ms.ullTotalPhys - ms.ullAvailPhys) / 1048576.0; }
+                    if (detail)
+                    {
+                        proc.Refresh();
+                        var pt = proc.TotalProcessorTime;
+                        if (!wasIdle && prevDetail && dt > 0) CpuGame = (float)(100.0 * (pt - lastProc).TotalSeconds / (dt * Environment.ProcessorCount));
+                        lastProc = pt;
+                        if (tick % 4 == 0 || GameThreads == 0) GameThreads = proc.Threads.Count; // перечисление потоков дорогое
+                        RamGameMB = proc.WorkingSet64 / 1048576.0;
+                        RamGamePrivateMB = proc.PrivateMemorySize64 / 1048576.0;
+                        ManagedMB = GC.GetTotalMemory(false) / 1048576.0;
+                        var ms = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
+                        if (GlobalMemoryStatusEx(ref ms)) { RamTotalMB = ms.ullTotalPhys / 1048576.0; RamUsedMB = (ms.ullTotalPhys - ms.ullAvailPhys) / 1048576.0; }
+                    }
+                    wasIdle = false; prevDetail = detail;
 
                     // GPU
                     if (nv) Nvml.Sample();
-                    Pdh.Sample(proc.Id, !nv);
+                    // PDH нужен для загрузки GPU без NVIDIA и для памяти GPU самой игры (только в подробном режиме), не чаще раза в секунду
+                    if ((!nv || detail) && tick % 2 == 0) Pdh.Sample(pid, !nv);
                 }
                 catch (Exception e) { Plugin.L.LogWarning("Telemetry: " + e.Message); Thread.Sleep(2000); }
             }

@@ -31,7 +31,7 @@ namespace NepFix
                 else if (mode == 2) wantMode = UpdateTimeManager.UpdateMode.OncePerFrame;
                 if (m.UpdatePerSeccond != wantCount) m.UpdatePerSeccond = wantCount;
                 if (m.UpdateMode != wantMode) m.UpdateMode = wantMode;
-                Info = $"Физика волос и одежды: по игре {(int)gameCount} Гц, {gameMode}; сейчас {(int)m.UpdatePerSeccond} Гц, {m.UpdateMode}";
+                if (Plugin.MenuOpen) Info = $"Физика волос и одежды: по игре {(int)gameCount} Гц, {gameMode}; сейчас {(int)m.UpdatePerSeccond} Гц, {m.UpdateMode}";
             }
             catch (Exception e) { Info = "Физика волос: " + e.Message; }
         }

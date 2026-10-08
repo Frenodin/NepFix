@@ -1,6 +1,6 @@
 namespace NepFix
 {
-    /// Переводы интерфейса: русский оригинал, английский перевод. Генерируется из loc/en*.py.
+    /// Переводы интерфейса: русский оригинал, английский перевод.
     internal static class LocData
     {
         public static readonly string[] Pairs =
@@ -421,6 +421,14 @@ namespace NepFix
             @"Физика волос и одежды: по игре {0} Гц, {1}; сейчас {2} Гц, {3}", @"Hair and cloth physics: game {0} Hz, {1}; now {2} Hz, {3}",
             @"Физика волос: ", @"Hair physics: ",
             @"карта", @"field",
+            @"{0} МГц", @"{0} MHz",
+            @"{0} Вт", @"{0} W",
+            @"по реальному кадру", @"real frame time",
+            @"игры", @"game",
+            @"SSAO: сила {0}→{1}, радиус {2}→{3}, выборок {4}, пониж. разрешение нет", @"SSAO: strength {0}→{1}, radius {2}→{3}, samples {4}, downsampled no",
+            @"SSAO: сила {0}→{1}, радиус {2}→{3}, выборок {4}, пониж. разрешение да", @"SSAO: strength {0}→{1}, radius {2}→{3}, samples {4}, downsampled yes",
+            @"Непрозрачность меню", @"Menu opacity",
+            @"Непрозрачность фона меню (0–1). 1 = сплошной тёмный фон, удобно для скриншотов.", @"Menu background opacity (0–1). 1 = solid dark background, handy for screenshots.",
             @"Лимит FPS. 0 = частота обновления монитора. Не ставьте выше, чем может выдать ПК: игра считает время от целевого FPS.", @"FPS limit. 0 = monitor refresh rate. Don't set it higher than your PC can deliver: the game measures time from the target FPS.",
             @"Вертикальная синхронизация.", @"Vertical sync.",
             @"Управлять частотой кадров (иначе игра держит 60).", @"Control the framerate (otherwise the game holds 60).",
