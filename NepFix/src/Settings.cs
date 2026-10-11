@@ -9,6 +9,7 @@ namespace NepFix
     {
         // Display / FPS
         public ConfigEntry<int> FpsLimit;          // 0 = частота монитора
+        public ConfigEntry<int> BattleFpsCap;      // 0 = без ограничения
         public ConfigEntry<bool> VSync;
         public ConfigEntry<bool> FpsUnlock;        // false = не трогать поведение игры
 
@@ -44,7 +45,7 @@ namespace NepFix
         public ConfigEntry<bool> DisableMapReduction;
 
         // Fixes (experimental)
-        public ConfigEntry<bool> AdaptiveFrameTiming, UnitStuckFix;
+        public ConfigEntry<bool> AdaptiveFrameTiming, UnitStuckFix, FollowerPathfinding, QuietFollowerTeleport;
         public ConfigEntry<bool> RigidbodyInterpolation;
         public ConfigEntry<bool> SyncPhysicsToFps;
         public ConfigEntry<bool> AnimatorAlwaysAnimate, FootIK;
@@ -84,6 +85,7 @@ namespace NepFix
             Loc.Init(Language.Value);
             Language.SettingChanged += (_, _) => Loc.Init(Language.Value);
             FpsLimit = c.Bind("1.Экран", "FpsLimit", 0, Loc.T("Лимит FPS. 0 = частота обновления монитора. Не ставьте выше, чем может выдать ПК: игра считает время от целевого FPS."));
+            BattleFpsCap = c.Bind("1.Экран", "BattleFpsCap", 0, Loc.T("Лимит FPS в бою. Игра рассчитывает бой на 60 кадров: если боссы атакуют слишком часто и бьют слишком больно, поставьте 60. 0 = без ограничения."));
             VSync = c.Bind("1.Экран", "VSync", false, Loc.T("Вертикальная синхронизация."));
             FpsUnlock = c.Bind("1.Экран", "FpsUnlock", true, Loc.T("Управлять частотой кадров (иначе игра держит 60)."));
 
@@ -115,6 +117,8 @@ namespace NepFix
             DisableMapReduction = c.Bind("5.Детализация", "DisableMapReduction", true, Loc.T("Отключить упрощение объектов карты вблизи (MapReduction)."));
 
             UnitStuckFix = c.Bind("6.Исправления", "UnitStuckFix", true, Loc.T("Враги не застревают на месте при высоком FPS: порог «юнит упёрся» пересчитывается под время кадра."));
+            FollowerPathfinding = c.Bind("6.Исправления", "FollowerPathfinding", true, Loc.T("Спутники на карте обходят препятствия по маршруту, а не упираются в них."));
+            QuietFollowerTeleport = c.Bind("6.Исправления", "QuietFollowerTeleport", true, Loc.T("Отставший спутник переносится без вспышки за кадр, под камеру, и догоняет отряд сам."));
             AdaptiveFrameTiming = c.Bind("6.Исправления", "AdaptiveFrameTiming", true, Loc.T("Скорость игровых процессов по реальному времени кадра (против тряски камеры/персонажей при просадках FPS)."));
             RigidbodyInterpolation = c.Bind("6.Исправления", "RigidbodyInterpolation", true, Loc.T("Интерполяция физических тел (против дёрганья при беге)."));
             SyncPhysicsToFps = c.Bind("6.Исправления", "SyncPhysicsToFps", false, Loc.T("Шаг физики = 1/FPS (эксперимент)."));

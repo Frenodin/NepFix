@@ -161,6 +161,7 @@ namespace NepFix
         }
 
         static float refreshT = -100;
+        public static void EnforceFps() => ICalls.Try(ApplyFps, "fps");
         static void ApplyFps()
         {
             float nowT = Time.unscaledTime;
@@ -168,18 +169,20 @@ namespace NepFix
             int target = S.FpsLimit.Value > 0 ? S.FpsLimit.Value : Refresh;
             if (S.VSync.Value) target = Math.Min(target, Refresh);
             target = Math.Clamp(target, 30, 500);
+            if (BattleWatch.CapActive) target = Math.Min(target, Math.Max(30, S.BattleFpsCap.Value));
             TargetFps = target;
 
             if (S.FpsUnlock.Value)
             {
-                int vs = S.VSync.Value ? 1 : 0;
+                // при VSync Unity игнорирует targetFrameRate: на время ограничения в бою VSync выключается
+                int vs = S.VSync.Value && !BattleWatch.CapActive ? 1 : 0;
                 if (ICalls.VSyncCount() != vs) QualitySettings.vSyncCount = vs;
                 if (Application.targetFrameRate != target || target != lastTarget)
                 {
                     // Сеттер игры также пересчитывает её внутренний шаг времени (GameTime).
                     try { GameTime.TargetFrameRate = target; }
                     catch { FrameRateHook.Set(target); }
-                    if (target != lastTarget) Plugin.L.LogInfo($"FPS-цель: {target} (монитор {Refresh} Гц, VSync {(S.VSync.Value ? "вкл" : "выкл")})");
+                    if (target != lastTarget) Plugin.L.LogInfo($"FPS-цель: {target} (монитор {Refresh} Гц, VSync {(S.VSync.Value && !BattleWatch.CapActive ? "вкл" : "выкл")}{(BattleWatch.CapActive ? ", бой" : "")})");
                     lastTarget = target;
                 }
             }

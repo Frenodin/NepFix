@@ -17,11 +17,11 @@ namespace NepFix
             public Transform t; public GameObject go; public IntPtr key; public bool player;
             public Vector3 prevP, curP; public Quaternion prevR, curR; public bool valid;
             public Vector3 savedP; public Quaternion savedR; public bool moved;
-            public float sy; public bool syValid; public float extUntil;
+            public float sy; public bool syValid; public float extUntil; public bool posOnly;
         }
         static readonly List<Unit> units = new();
         static readonly HashSet<IntPtr> have = new();
-        static int scanVersion = -1;
+        static int scanVersion = -1, unitVersion = -1;
         static float lastFixed = -1;
         static bool hooked, camMoved;
         static Transform camT; static Vector3 camSaved;
@@ -51,6 +51,9 @@ namespace NepFix
             float now = Time.unscaledTime;
             var ccs = Scan.Controllers();
             if (Scan.ControllersVersion != scanVersion) { scanVersion = Scan.ControllersVersion; Sync(ccs); }
+            // враги на карте ходят только в шагах физики (50 в секунду), на высоком FPS это видно как дрожание
+            var mus = Scan.MapUnits();
+            if (Scan.MapUnitsVersion != unitVersion) { unitVersion = Scan.MapUnitsVersion; SyncMap(mus); }
             bool stepped = Time.fixedTime != lastFixed;
             lastFixed = Time.fixedTime;
             for (int i = units.Count - 1; i >= 0; i--)
@@ -58,14 +61,14 @@ namespace NepFix
                 var u = units[i];
                 try
                 {
-                    if (u.t == null || !u.go.activeInHierarchy) { units.RemoveAt(i); have.Remove(u.key); scanVersion = -1; continue; }
+                    if (u.t == null || !u.go.activeInHierarchy) { units.RemoveAt(i); have.Remove(u.key); scanVersion = -1; unitVersion = -1; continue; }
                     Vector3 p = u.t.position; Quaternion r = u.t.rotation;
                     if (!u.valid) { u.prevP = u.curP = p; u.prevR = u.curR = r; u.valid = true; continue; }
                     if (stepped) { u.prevP = u.curP; u.prevR = u.curR; u.curP = p; u.curR = r; }
                     else if ((p - u.curP).sqrMagnitude > 1e-8f) { u.prevP = u.curP = p; u.prevR = u.curR = r; u.extUntil = now + 1.5f; } // сдвинули вне физики: сценка или суперприём, сглаживание на время выключаем
                     if ((u.curP - u.prevP).sqrMagnitude > 4f) { u.prevP = u.curP; u.prevR = u.curR; u.extUntil = now + 1.5f; } // телепорт
                 }
-                catch { have.Remove(u.key); units.RemoveAt(i); scanVersion = -1; }
+                catch { have.Remove(u.key); units.RemoveAt(i); scanVersion = -1; unitVersion = -1; }
             }
             // мотоцикл на уступах: игра поднимает его на высоту уступа за один шаг, видно как подскок
             float tau = Plugin.S.BikeLedgeSmooth.Value;
@@ -80,6 +83,24 @@ namespace NepFix
                 u.sy += (y - u.sy) * (1f - (float)Math.Exp(-dt / t));
             }
             Count = units.Count;
+        }
+
+        static void SyncMap(List<MapUnitBaseComponent> mus)
+        {
+            foreach (var u in mus)
+            {
+                try
+                {
+                    if (u == null) continue;
+                    var t = u.transform;
+                    if (have.Contains(t.Pointer)) continue;
+                    if (!t.name.Contains("ENEMY") || !u.gameObject.activeInHierarchy) continue;
+                    have.Add(t.Pointer);
+                    // поворот враг меняет каждый кадр сам, сглаживается только положение
+                    units.Add(new Unit { t = t, go = u.gameObject, key = t.Pointer, player = false, posOnly = true });
+                }
+                catch { }
+            }
         }
 
         static void Sync(List<CharacterController> ccs)
@@ -130,12 +151,12 @@ namespace NepFix
                     u.moved = false;
                     if (!u.valid || now < u.extUntil) continue;
                     // стоящих на месте не трогаем: положение между шагами совпадает с текущим
-                    if (u.prevP == u.curP && u.prevR == u.curR && !u.syValid) continue;
+                    if (u.prevP == u.curP && (u.posOnly || u.prevR == u.curR) && !u.syValid) continue;
                     if (u.t == null) continue;
                     Vector3 p = u.t.position;
                     if ((p - u.curP).sqrMagnitude > 1e-8f) continue;
                     Vector3 ip = Vector3.LerpUnclamped(u.prevP, u.curP, a);
-                    Quaternion ir = Quaternion.Slerp(u.prevR, u.curR, a);
+                    Quaternion ir = u.posOnly ? u.t.rotation : Quaternion.Slerp(u.prevR, u.curR, a);
                     if (u.syValid) ip.y = u.sy + (ip.y - u.curP.y);
                     u.savedP = p; u.savedR = u.t.rotation;
                     u.t.SetPositionAndRotation(ip, ir);

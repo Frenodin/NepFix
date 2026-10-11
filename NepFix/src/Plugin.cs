@@ -13,7 +13,7 @@ namespace NepFix
         public const string Guid = "casimoy.nepfix";
         public const string Name = "NepFix";
         public static bool MenuOpen;
-        public const string Version = "1.20.0";
+        public const string Version = "1.20.2";
 
         internal static ManualLogSource L;
         internal static Settings S;

@@ -38,7 +38,9 @@ namespace NepFix
             Step("lod-tick", Distance.Tick);
             Step("gloss", Gloss.Update);
             Step("textures", Optimize.Tick);
+            Step("battle", BattleWatch.Tick);
             Step("unit-stuck", UnitStuck.Tick);
+            Step("followers", Followers.Tick);
             Step("interp", Interp.Update);
             Step("bike", Bike.Update);
             try { NepFX.Housekeeping(); } catch { }
@@ -246,6 +248,8 @@ namespace NepFix
                     Toggle("Управлять FPS, снять лимит 60", S.FpsUnlock);
                     IntChoice("Лимит FPS", S.FpsLimit, new[] { 0, 30, 60, 90, 120, 144, 165, 240 },
                         new[] { $"как монитор, {Gfx.Refresh}", "30", "60", "90", "120", "144", "165", "240" });
+                    IntChoice("Лимит FPS в бою", S.BattleFpsCap, new[] { 0, 60, 90, 120 }, new[] { "без ограничения", "60, как задумано игрой", "90", "120" });
+                    Note("Если в бою боссы атакуют слишком часто и бьют слишком больно, поставьте здесь 60: игра рассчитана на 60 кадров. Переключать можно прямо во время боя.");
                     Toggle("Вертикальная синхронизация", S.VSync);
                     IntChoice("Кадров в очереди GPU", S.MaxQueuedFrames, new[] { 0, 1, 2, 3 }, new[] { "как в игре", "1, минимальная задержка", "2", "3" });
                     IntChoice("Оверлей мониторинга", S.HudMode, new[] { 0, 1, 2, 3 }, new[] { "выкл", "компактный", "подробный", "подробный + график" });
@@ -320,6 +324,8 @@ namespace NepFix
                 case 6:
                     Toggle("Тайминг по реальному времени кадра", S.AdaptiveFrameTiming);
                     Toggle("Враги не застревают при высоком FPS", S.UnitStuckFix);
+                    Toggle("Спутники обходят препятствия", S.FollowerPathfinding);
+                    Toggle("Спутники догоняют без вспышки", S.QuietFollowerTeleport);
                     Note($"Юнит бросал путь, считая что упёрся: {UnitStuck.GiveUps} раз. Мод вернул на путь: {UnitStuck.Rescued} раз.");
                     Toggle("Интерполяция физики против дёрганья", S.RigidbodyInterpolation);
                     Toggle("Шаг физики под FPS, эксперимент", S.SyncPhysicsToFps);
