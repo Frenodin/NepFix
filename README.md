@@ -32,7 +32,8 @@ The mod does not touch any game text and contains no translation.
 - **FPS cap removal.** You can set your own limit. The default is your monitor's refresh rate.
 - **Frame-time based game timing.** The camera and characters no longer shake when FPS drops.
 - **Rigidbody interpolation against stutter while running.** Heroines and enemies are excluded so skills and EXE Drives stay intact.
-- **Smooth party and bike movement** between the game's physics steps.
+- **Smooth party, bike and map enemy movement** between the game's physics steps.
+- **Optional FPS limit for battles only.** If bosses attack too often and hit too hard, set it to 60.
 - **Character height smoothing.** Removes leg and hair jitter while walking at high FPS.
 - **MagicaCloth hair and cloth physics rate:** game default, matched to FPS, or once per frame.
 - **GPU frame queue setting:** lower input latency or more even frame pacing.
@@ -79,6 +80,8 @@ A custom shader injected into the game's URP pipeline.
 
 ### Game bug fixes
 - **Enemies got stuck walking in place at high FPS.** The game decides whether an enemy is blocked by how far it moved in one frame, and that threshold was tuned for 60 FPS. The mod measures real speed over a time window, so the check no longer depends on framerate.
+- **Enemies shook at ledges.** When a patrol point lies past a ledge, the game rolls back every step of the enemy. The mod notices this within half a second, lets the enemy stand while the game picks a new point, and turns on route search for it.
+- **Party members on the map ran into everything** and teleported onto the leader with a flash. They now path around obstacles with the game's own route search, stop running into walls, and catch up from off-screen without the flash.
 - **Heroines drifted out of frame during EXE Drives and skills.** Physics interpolation on characters caused it, and their bodies are now left alone.
 - **Smoother animation transitions** on the field map.
 - **Smooth weapon draw:** weapons fade in and out smoothly on out-of-battle attacks.
