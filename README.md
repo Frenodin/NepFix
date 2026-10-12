@@ -81,7 +81,8 @@ A custom shader injected into the game's URP pipeline.
 ### Game bug fixes
 - **Enemies got stuck walking in place at high FPS.** The game decides whether an enemy is blocked by how far it moved in one frame, and that threshold was tuned for 60 FPS. The mod measures real speed over a time window, so the check no longer depends on framerate.
 - **Enemies shook at ledges.** When a patrol point lies past a ledge, the game rolls back every step of the enemy. The mod notices this within half a second, lets the enemy stand while the game picks a new point, and turns on route search for it.
-- **Party members on the map ran into everything** and teleported onto the leader with a flash. They now path around obstacles with the game's own route search, stop running into walls, and catch up from off-screen without the flash.
+- **Models sank into the ground** on maps with water and mud: the game's route search pulled units down toward the height of its route points. Movement along a route is now kept horizontal.
+- **Party members appeared on the leader with a flash** when the game teleported the ones that fell behind. They now land off-screen, under the camera, and catch up on their own.
 - **Heroines drifted out of frame during EXE Drives and skills.** Physics interpolation on characters caused it, and their bodies are now left alone.
 - **Smoother animation transitions** on the field map.
 - **Smooth weapon draw:** weapons fade in and out smoothly on out-of-battle attacks.
