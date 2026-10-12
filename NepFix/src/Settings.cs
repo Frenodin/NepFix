@@ -45,7 +45,7 @@ namespace NepFix
         public ConfigEntry<bool> DisableMapReduction;
 
         // Fixes (experimental)
-        public ConfigEntry<bool> AdaptiveFrameTiming, UnitStuckFix, FollowerPathfinding, QuietFollowerTeleport;
+        public ConfigEntry<bool> AdaptiveFrameTiming, UnitStuckFix, QuietFollowerTeleport;
         public ConfigEntry<bool> RigidbodyInterpolation;
         public ConfigEntry<bool> SyncPhysicsToFps;
         public ConfigEntry<bool> AnimatorAlwaysAnimate, FootIK;
@@ -117,7 +117,6 @@ namespace NepFix
             DisableMapReduction = c.Bind("5.Детализация", "DisableMapReduction", true, Loc.T("Отключить упрощение объектов карты вблизи (MapReduction)."));
 
             UnitStuckFix = c.Bind("6.Исправления", "UnitStuckFix", true, Loc.T("Враги не застревают на месте при высоком FPS: порог «юнит упёрся» пересчитывается под время кадра."));
-            FollowerPathfinding = c.Bind("6.Исправления", "FollowerPathfinding", true, Loc.T("Спутники на карте обходят препятствия по маршруту, а не упираются в них."));
             QuietFollowerTeleport = c.Bind("6.Исправления", "QuietFollowerTeleport", true, Loc.T("Отставший спутник переносится без вспышки за кадр, под камеру, и догоняет отряд сам."));
             AdaptiveFrameTiming = c.Bind("6.Исправления", "AdaptiveFrameTiming", true, Loc.T("Скорость игровых процессов по реальному времени кадра (против тряски камеры/персонажей при просадках FPS)."));
             RigidbodyInterpolation = c.Bind("6.Исправления", "RigidbodyInterpolation", true, Loc.T("Интерполяция физических тел (против дёрганья при беге)."));

@@ -29,7 +29,7 @@ namespace NepFix
                 [S.OutlineWidth] = "авто", [S.CharacterShadows] = "вкл", [S.WeaponSmooth] = "вкл", [S.WeaponFade] = "140 мс", [S.AnimBlendMin] = "180 мс",
                 [S.MotionInterp] = "вкл", [S.BikeHandling] = "1,20x", [S.BikeSpeed] = "как в игре", [S.BikeWallSoft] = "30%", [S.BikeLedgeSmooth] = "120 мс",
                 [S.BikeProbe] = "выкл", [S.MapVoiceInterval] = "40 с",
-                [S.AdaptiveFrameTiming] = "вкл", [S.UnitStuckFix] = "вкл", [S.FollowerPathfinding] = "вкл", [S.QuietFollowerTeleport] = "вкл", [S.RigidbodyInterpolation] = "вкл", [S.SyncPhysicsToFps] = "выкл", [S.AnimatorAlwaysAnimate] = "выкл",
+                [S.AdaptiveFrameTiming] = "вкл", [S.UnitStuckFix] = "вкл", [S.QuietFollowerTeleport] = "вкл", [S.RigidbodyInterpolation] = "вкл", [S.SyncPhysicsToFps] = "выкл", [S.AnimatorAlwaysAnimate] = "выкл",
                 [S.SmoothUnits] = "вкл", [S.SmoothTime] = "40 мс", [S.FootIK] = "вкл", [S.ClothRate] = "как в игре", [S.VerboseLog] = "вкл",
                 [S.PhysicsNoAutoSync] = "выкл", [S.FastLoading] = "вкл", [S.AnimatorCulling] = "выкл",
                 [S.ForceLightShadows] = "вкл", [S.MaxShadowedLights] = "4", [S.AmbientMul] = "1,00x", [S.CharAmbient] = "как в игре", [S.AmbientAdd] = "нет",

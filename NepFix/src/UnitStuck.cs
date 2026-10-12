@@ -26,8 +26,8 @@ namespace NepFix
 
         // Скорость по реальному перемещению за последние ~0,3 с: не зависит ни от FPS, ни от того,
         // что физика двигает юнита не в каждом кадре.
-        class Track { public Vector3 p0; public float t0; public Vector3 p1; public float t1; public float speed = -1; public bool gaveUp; public int kind = -1; public float stopUntil, releasedAt, pushT, gdT, gd0, stT, scT, holdUntil; public int sc; public bool goodValid, goodNextValid; public Vector3 goal0, good, goodNext; }
-        public static int FriendStops, NearGoals, ForcedGiveUps, Unwedged;
+        class Track { public Vector3 p0; public float t0; public Vector3 p1; public float t1; public float speed = -1; public bool gaveUp; public int kind = -1; public float gdT, gd0, stT, scT, holdUntil; public int sc; public bool goodValid, goodNextValid; public Vector3 goal0, good, goodNext; }
+        public static int NearGoals, ForcedGiveUps, Unwedged;
         static readonly Dictionary<IntPtr, Track> tracks = new();
         public static int GiveUps, Rescued;
         static int logged;
@@ -60,17 +60,6 @@ namespace NepFix
                 float dist = (g - p).magnitude;
                 // Спутник упёрся (бежит в стену за игроком): игра ставит ему цель каждый кадр, сдаться он не может
                 // и бежит в стену бесконечно. Останавливаем его на секунду, потом пробует снова.
-                if (t.kind == 1 && Plugin.S.FollowerPathfinding.Value)
-                {
-                    if (now < t.stopUntil) { mp.is_goal_ = true; return; }
-                    bool pushing = mp.speed_ > 1f && t.speed < 0.4f && dist > 1f && dist < 6f;
-                    if (!pushing) t.pushT = now;
-                    else if (now - t.pushT > 0.5f && now - t.releasedAt > 0.5f)
-                    {
-                        t.stopUntil = now + 1f; t.releasedAt = now + 1f; t.pushT = now + 1f; FriendStops++;
-                        mp.is_goal_ = true; return;
-                    }
-                }
                 // Враг почти дошёл до точки, но топчется или кружит вокруг неё на 0,3–1 м: игра через секунду сдаётся и шлёт его
                 // туда же снова, со стороны это тряска на месте. Если за 0,4 с расстояние до точки почти не изменилось, засчитываем приход.
                 // Враг упёрся (склон, край ямы, другой враг) и дёргается на месте. Игра считает «движение» по сумме
@@ -208,4 +197,26 @@ namespace NepFix
         static void Postfix(MapMovePoint __instance, MapUnitBaseComponent unit_base) { UnitStuck.MoveAfter(__instance, unit_base); }
     }
 
+
+    // Маршрут игры даёт вектор движения с вертикальной составляющей: юнит тянет вниз к точке маршрута,
+    // и на картах с водой и грязью (Глубь топей) модель уходит под землю. Прямой ход игры всегда горизонтальный,
+    // приводим маршрут к нему же, скорость сохраняется.
+    [HarmonyPatch(typeof(MapMovePoint), "RouteSearchSwitch")]
+    internal static class PatchRouteVectorFlat
+    {
+        static int logged;
+        static void Postfix(bool __result, ref Vector3 move_vector)
+        {
+            if (!__result) return;
+            float y = move_vector.y;
+            if (Math.Abs(y) < 1e-5f) return;
+            float mag = move_vector.magnitude;
+            var h = new Vector3(move_vector.x, 0f, move_vector.z);
+            if (Math.Abs(y) > mag * 0.2f && ++logged <= 15 && Plugin.S.VerboseLog.Value)
+                Plugin.L.LogInfo($"Маршрут тянул юнит по высоте: {y:0.00} при скорости {mag:0.00}, выровнено");
+            float hm = h.magnitude;
+            if (hm < 1e-4f) { move_vector = Vector3.zero; return; }
+            move_vector = h * (mag / hm);
+        }
+    }
 }

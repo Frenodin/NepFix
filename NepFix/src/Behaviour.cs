@@ -40,7 +40,6 @@ namespace NepFix
             Step("textures", Optimize.Tick);
             Step("battle", BattleWatch.Tick);
             Step("unit-stuck", UnitStuck.Tick);
-            Step("followers", Followers.Tick);
             Step("interp", Interp.Update);
             Step("bike", Bike.Update);
             try { NepFX.Housekeeping(); } catch { }
@@ -324,7 +323,6 @@ namespace NepFix
                 case 6:
                     Toggle("Тайминг по реальному времени кадра", S.AdaptiveFrameTiming);
                     Toggle("Враги не застревают при высоком FPS", S.UnitStuckFix);
-                    Toggle("Спутники обходят препятствия", S.FollowerPathfinding);
                     Toggle("Спутники догоняют без вспышки", S.QuietFollowerTeleport);
                     Note($"Юнит бросал путь, считая что упёрся: {UnitStuck.GiveUps} раз. Мод вернул на путь: {UnitStuck.Rescued} раз.");
                     Toggle("Интерполяция физики против дёрганья", S.RigidbodyInterpolation);

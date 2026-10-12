@@ -5,53 +5,13 @@ using UnityEngine;
 
 namespace NepFix
 {
-    /// Спутники отряда на карте (MapUnitTypeFriendComponent).
-    /// Игра ведёт их к точке строя прямо, без обхода препятствий: они упираются в камни и деревья, MapMovePoint
-    /// через секунду сдаётся, спутник отстаёт и AiLostTeleport переносит его на место игрока со вспышкой.
-    /// 1. Поиск пути: у MapMovePoint есть поиск маршрута по данным карты (им пользуются враги), спутникам игра его не включает.
-    ///    RouteSearchMoveSet(true, 6, 2): маршрут строится, если до цели больше 6 м и прямой путь непроходим.
-    /// 2. Тихий перенос: вместо вспышки на игроке спутник ставится на землю под камерой, вне кадра, и догоняет сам.
+    /// Спутники отряда на карте (MapUnitTypeFriendComponent). Движение остаётся как в игре: попытки улучшить его
+    /// (поиск пути, остановки, перенос по прогрессу, след героини) на картах вроде Глуби топей делали только хуже.
+    /// Отставшего спутника AiLostTeleport переносит на место игрока со вспышкой; мод ставит его на землю под камерой,
+    /// вне кадра, без вспышки, и он догоняет сам.
     internal static class Followers
     {
-        static Settings S => Plugin.S;
-        static float scanT = -100;
-        static readonly List<MapUnitTypeFriendComponent> friends = new();
-        static readonly HashSet<IntPtr> routeSet = new();
-        public static int Count, Rerouted, QuietTeleports, Fallbacks;
-        static int scene = int.MinValue;
-
-        public static void Tick()
-        {
-            float now = Time.unscaledTime;
-            int sc = Scan.Scene;
-            if (sc != scene) { scene = sc; friends.Clear(); routeSet.Clear(); scanT = -100; }
-            if (now - scanT < 1f) return;
-            scanT = now;
-            bool route = S.FollowerPathfinding.Value;
-            friends.Clear();
-            var arr = Scan.All<MapUnitTypeFriendComponent>();
-            if (arr != null)
-                for (int i = 0; i < arr.Length; i++)
-                {
-                    var f = arr[i]?.TryCast<MapUnitTypeFriendComponent>();
-                    if (f != null) friends.Add(f);
-                }
-            Count = friends.Count;
-            foreach (var f in friends)
-            {
-                try
-                {
-                    var mp = f.move_point_;
-                    if (mp != null)
-                    {
-                        IntPtr k = mp.Pointer;
-                        if (route && !mp.route_search_use_) { mp.RouteSearchMoveSet(true, 6f, 2f); routeSet.Add(k); Rerouted++; if (Rerouted <= 8) Plugin.L.LogInfo($"Спутники: поиск пути включён для {f.name}"); }
-                        else if (!route && routeSet.Remove(k) && mp.route_search_use_) mp.RouteSearchMoveSet(false, 6f, 2f);
-                    }
-                }
-                catch { }
-            }
-        }
+        public static int QuietTeleports, Fallbacks;
 
         // ---- тихий перенос ----
         public static bool InLostTeleport;
